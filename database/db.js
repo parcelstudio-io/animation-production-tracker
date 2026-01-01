@@ -220,6 +220,23 @@ class DatabaseManager {
         }
     }
 
+    // Alias methods for consistency with server.js calls
+    async getAllProductions() {
+        return this.getAllData();
+    }
+
+    async createProduction(data) {
+        return this.insertData(data);
+    }
+
+    async updateProduction(id, data) {
+        return this.updateData(id, data);
+    }
+
+    async deleteProduction(id) {
+        return this.deleteData(id);
+    }
+
     isEnabled() {
         return this.isCloudEnabled && this.isConnected;
     }
