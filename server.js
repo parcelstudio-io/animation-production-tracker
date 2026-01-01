@@ -398,10 +398,28 @@ async function performFullSync() {
 }
 
 // API Routes
-app.get('/api/structure', (req, res) => {
+app.get('/api/structure', async (req, res) => {
   console.log('=== /api/structure endpoint called ===');
+  
+  // Try to get structure from local server first (if available)
+  try {
+    const localStructure = await queryLocalServerForStructure();
+    if (localStructure && localStructure.structure) {
+      console.log('✅ Using structure from local server');
+      console.log('API /structure returning from local server:', {
+        episodeCount: localStructure.structure.episodes.length,
+        shortFormCount: localStructure.structure.shortForms.length
+      });
+      return res.json(localStructure.structure);
+    }
+  } catch (error) {
+    console.warn('⚠️  Failed to get structure from local server:', error.message);
+  }
+  
+  // Fallback to local scanning (for development)
+  console.log('📁 Using local directory scanning as fallback');
   const structure = scanDirectoryStructure();
-  console.log('API /structure returning:', {
+  console.log('API /structure returning from local scan:', {
     episodeCount: structure.episodes.length,
     shortFormCount: structure.shortForms.length
   });
