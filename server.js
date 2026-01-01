@@ -135,9 +135,9 @@ function scanForScenesAndShots(projectPath, project, projectType) {
       console.log(`Shots path does not exist: ${shotsPath}`);
     }
   } else if (projectType === 'short') {
-    // Short-form: <root_dir>/contents/short_forms/<short_title>/03_layout/<scene_num>_<shot_num>/
+    // Short-form: <root_dir>/contents/short_forms/<short_title>/02_layout/<scene_num>_<shot_num>/
     // scenes have prefix `sc` and shots have prefix `sh`
-    const layoutPath = path.join(projectPath, '03_layout');
+    const layoutPath = path.join(projectPath, '02_layout');
     
     if (fs.existsSync(layoutPath)) {
       try {
@@ -148,7 +148,7 @@ function scanForScenesAndShots(projectPath, project, projectType) {
           
           try {
             if (fs.statSync(sceneShotPath).isDirectory()) {
-              // Parse combined scene_shot format like "sc_01_sh_02"
+              // Parse individual scene_shot format like "sc_01_sh_01"
               const match = sceneShot.match(/^(sc_\d+)_(sh_\d+)$/i);
               if (match) {
                 const scene = match[1];
