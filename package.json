@@ -1,0 +1,32 @@
+{
+  "name": "animation-production-tracker",
+  "version": "1.0.0",
+  "description": "Clean webapp for tracking animation production submissions and approvals",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "migrate": "node database/migrate.js",
+    "build": "echo 'Build completed'",
+    "deploy": "gcloud app deploy",
+    "deploy-appengine": "gcloud app deploy app.yaml --quiet"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.0.0",
+    "axios": "^1.6.0",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "pg": "^8.11.0",
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Parcel Studio",
+  "license": "MIT"
+}

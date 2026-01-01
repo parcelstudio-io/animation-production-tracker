@@ -1,0 +1,49 @@
+# ngrok configuration for Animation Production Tracker
+# Place this file at ~/.ngrok2/ngrok.yml or use --config flag
+
+version: "2"
+
+# ngrok authtoken (you'll need to provide this)
+authtoken: YOUR_NGROK_AUTH_TOKEN
+
+# Tunnel configurations
+tunnels:
+  animation-tracker:
+    # Local development server
+    addr: 3000
+    proto: http
+    # Custom domain (if you have ngrok pro/business)
+    # hostname: thebreakfastfam.ngrok.io
+    # Basic auth (optional)
+    # auth: "username:password"
+    # Request/response inspection
+    inspect: true
+    # Custom headers
+    request_headers:
+      add:
+        - "X-Source: ngrok"
+    # Webhook verification
+    verify_webhook: true
+
+  # Alternative tunnel for testing
+  animation-tracker-test:
+    addr: 3001
+    proto: http
+    inspect: false
+
+# Global configuration
+web_addr: localhost:4040
+console_ui: true
+console_ui_color: transparent
+http_proxy: ""
+https_proxy: ""
+no_proxy: "localhost"
+
+# Logging
+log_level: info
+log_format: json
+log: /tmp/ngrok.log
+
+# Update checking
+update_check: true
+update_channel: stable

@@ -1,0 +1,53 @@
+# Google App Engine Standard Environment Configuration
+# Uses free tier quotas - no containers required
+
+runtime: nodejs18
+
+# Free tier instance class
+instance_class: F1
+
+# Automatic scaling with free tier limits
+automatic_scaling:
+  min_instances: 0
+  max_instances: 1
+  min_idle_instances: 0
+  max_idle_instances: 1
+  target_cpu_utilization: 0.6
+
+# Environment variables
+env_variables:
+  NODE_ENV: "production"
+  ENABLE_CLOUD_SYNC: "true"
+  ENABLE_LOCAL_EXCEL: "false"
+  PROJECT_ID: "thebreakfastfam"
+  REGION: "us-central1"
+  # Database connection will be added via Cloud SQL Proxy
+
+# Cloud SQL connection (free tier)
+beta_settings:
+  cloud_sql_instances: "thebreakfastfam:us-central1:animation-db-free"
+
+# Static files serving
+handlers:
+- url: /public
+  static_dir: public
+  secure: always
+
+- url: /.*
+  script: auto
+  secure: always
+
+# Health check configuration
+readiness_check:
+  path: "/api/debug"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+
+liveness_check:
+  path: "/api/debug"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 4
+  success_threshold: 2

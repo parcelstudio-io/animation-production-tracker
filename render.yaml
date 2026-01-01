@@ -1,0 +1,28 @@
+# Render.com deployment configuration
+# This file configures the free tier deployment
+
+services:
+  - type: web
+    name: animation-tracker
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/debug
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_CLOUD_SYNC
+        value: true
+      - key: ENABLE_LOCAL_EXCEL
+        value: false
+      - key: AUTO_BACKUP_EXCEL
+        value: true
+      - key: WEBHOOK_SECRET
+        value: ParcelStudio2025
+
+databases:
+  - name: animation-tracker-db
+    plan: free
+    databaseName: production_tracker
+    user: app_user

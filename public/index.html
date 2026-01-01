@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animation Production Tracker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Animation Production Tracker</h1>
+            <p>Track animation submissions and approvals</p>
+        </header>
+
+        <main>
+            <section class="submission-form">
+                <h2>New Submission</h2>
+                <form id="submissionForm">
+                    <div class="form-group">
+                        <label for="animator">Animator:</label>
+                        <select id="animator" required>
+                            <option value="">Select Animator</option>
+                            <option value="Abhishek A.">Abhishek A.</option>
+                            <option value="Kiran Kilaga">Kiran Kilaga</option>
+                            <option value="Saumitra Sachan">Saumitra Sachan</option>
+                            <option value="Pranab Rout">Pranab Rout</option>
+                            <option value="Nazir Hossain">Nazir Hossain</option>
+                            <option value="Nikhil Prakash">Nikhil Prakash</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="projectType">Project Type:</label>
+                        <select id="projectType" required>
+                            <option value="">Select Type</option>
+                            <option value="long-form">Long-form Episode</option>
+                            <option value="short-form">Short-form</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="episode">Episode/Title:</label>
+                        <select id="episode" required disabled>
+                            <option value="">Select Episode/Title</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scene">Scene:</label>
+                        <select id="scene" required disabled>
+                            <option value="">Select Scene</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="shot">Shot:</label>
+                        <select id="shot" required disabled>
+                            <option value="">Select Shot</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="week">Week (YYYYMMDD):</label>
+                        <select id="week" required>
+                            <option value="">Select Week</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status">Status:</label>
+                        <select id="status" required>
+                            <option value="">Select Status</option>
+                            <option value="submitted">Submitted for Review</option>
+                            <option value="approved">Approved</option>
+                            <option value="revision">Needs Revision</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="notes">Notes:</label>
+                        <textarea id="notes" rows="3" placeholder="Additional notes..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn-submit">Submit Entry</button>
+                </form>
+            </section>
+
+            <section class="summary-section">
+                <h2>Production Summary</h2>
+                
+                <div class="week-navigator">
+                    <h3>Weekly Summary</h3>
+                    <div class="week-controls">
+                        <button id="prevWeek" class="btn-arrow" title="Previous Week (Older)">←</button>
+                        <input type="text" id="weekFilter" pattern="[0-9]{8}" 
+                               placeholder="Enter week (YYYYMMDD)" title="Format: YYYYMMDD">
+                        <button id="nextWeek" class="btn-arrow" title="Next Week (Newer)">→</button>
+                    </div>
+                    <button id="filterWeek" class="btn-filter">View Week</button>
+                    <button id="showAll" class="btn-filter">Show All</button>
+                </div>
+
+                <div class="data-table-container">
+                    <table id="productionTable">
+                        <thead>
+                            <tr>
+                                <th>Animator</th>
+                                <th>Project Type</th>
+                                <th>Episode/Title</th>
+                                <th>Scene</th>
+                                <th>Shot</th>
+                                <th>Week</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="edit-modal" id="editModal">
+                <div class="modal-content">
+                    <h3>Edit Entry</h3>
+                    <form id="editForm">
+                        <!-- Form fields will be populated by JavaScript -->
+                    </form>
+                    <div class="modal-actions">
+                        <button id="saveEdit" class="btn-submit">Save Changes</button>
+                        <button id="cancelEdit" class="btn-cancel">Cancel</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
