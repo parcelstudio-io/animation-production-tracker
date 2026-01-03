@@ -371,3 +371,58 @@ table tbody tr:hover {
     table th:nth-child(8), table td:nth-child(8) { width: 150px; } /* Notes */
     table th:nth-child(9), table td:nth-child(9) { width: 100px; } /* Actions */
 }
+
+/* Popup Bar Styles */
+#sync-popup-bar {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: default;
+    user-select: none;
+    will-change: transform, opacity;
+}
+
+#sync-popup-bar:hover {
+    transform: translateX(-50%) translateY(0) scale(1.02) !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4) !important;
+}
+
+/* Popup Bar Animation Classes */
+@keyframes slideInFromTop {
+    0% {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+    100% {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutToTop {
+    0% {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+    100% {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+}
+
+/* Additional responsive styles for popup bars */
+@media (max-width: 768px) {
+    #sync-popup-bar {
+        left: 10px !important;
+        right: 10px !important;
+        transform: translateX(0) !important;
+        max-width: none !important;
+        font-size: 13px !important;
+        padding: 10px 16px !important;
+    }
+    
+    #sync-popup-bar:hover {
+        transform: translateX(0) scale(1.02) !important;
+    }
+}

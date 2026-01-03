@@ -18,15 +18,22 @@ class ProductionTracker {
         try {
             console.log('🔄 Page refresh detected - syncing from Excel file...');
             
+            // Show initial loading popup
+            this.showPopupBar('🔄 Loading directory information...', 'loading');
+            
             // Load Railway data first (may be outdated)
             await this.loadDirectoryStructure();
             await this.loadProductionData();
+            
+            // Show success popup for directory fetch
+            this.showPopupBar('✅ Directory information loaded successfully', 'success', 3000);
             
             // 🎯 CRITICAL: Sync Railway database FROM Excel file (Excel is authoritative)
             await this.fetchFromLocalServer();
             
         } catch (error) {
             console.error('Error loading page data:', error);
+            this.showPopupBar('❌ Failed to load directory information', 'error', 5000);
         }
     }
 
@@ -44,6 +51,10 @@ class ProductionTracker {
                     console.log(`✅ Excel sync successful - ${result.syncFromExcel.recordsCount} records`);
                     console.log('📊 Railway database updated with Excel data');
                     
+                    // Show popup bar for successful Excel sync
+                    const recordCount = result.syncFromExcel.recordsCount || 0;
+                    this.showPopupBar(`📊 Excel sync successful: ${recordCount} records synchronized`, 'success', 5000);
+                    
                     // Reload production data (now synced with Excel)
                     await this.loadProductionData();
                     this.renderTable();
@@ -60,6 +71,10 @@ class ProductionTracker {
                     
                 } else {
                     console.log('⚠️ Local server not available - using existing Railway data');
+                    
+                    // Show warning popup for Excel sync failure
+                    this.showPopupBar('⚠️ Excel file not accessible - using Railway data only', 'warning', 6000);
+                    
                     this.showSyncStatus(false, 'Excel file not accessible', {
                         success: false,
                         message: result.syncFromExcel?.message || 'Local server not available'
@@ -67,6 +82,10 @@ class ProductionTracker {
                 }
             } else {
                 console.error('❌ Failed to sync from Excel file');
+                
+                // Show error popup for Excel sync failure
+                this.showPopupBar('❌ Excel sync failed - check local server connection', 'error', 6000);
+                
                 this.showSyncStatus(false, 'Excel sync failed', {
                     success: false,
                     error: result.error || 'Unknown error'
@@ -75,6 +94,10 @@ class ProductionTracker {
             
         } catch (error) {
             console.error('❌ Excel sync error:', error);
+            
+            // Show error popup for Excel sync error
+            this.showPopupBar('❌ Excel sync error - local server unreachable', 'error', 6000);
+            
             this.showSyncStatus(false, 'Excel sync error', {
                 success: false,
                 error: error.message
@@ -198,6 +221,76 @@ class ProductionTracker {
         }
         
         alert(message);
+    }
+
+    // Generic popup bar system for various notifications
+    showPopupBar(message, type = 'info', duration = 4000) {
+        // Remove existing popup bar if any
+        const existingPopup = document.getElementById('sync-popup-bar');
+        if (existingPopup) {
+            existingPopup.remove();
+        }
+        
+        // Create popup bar element
+        const popupBar = document.createElement('div');
+        popupBar.id = 'sync-popup-bar';
+        popupBar.textContent = message;
+        
+        // Style based on type
+        const styles = {
+            base: `
+                position: fixed;
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 12px 24px;
+                border-radius: 0 0 8px 8px;
+                color: white;
+                font-weight: 600;
+                font-size: 14px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                transition: all 0.3s ease;
+                max-width: 600px;
+                text-align: center;
+            `,
+            success: 'background: linear-gradient(135deg, #28a745, #20c997);',
+            error: 'background: linear-gradient(135deg, #dc3545, #e74c3c);',
+            loading: 'background: linear-gradient(135deg, #007bff, #17a2b8);',
+            warning: 'background: linear-gradient(135deg, #ffc107, #fd7e14);',
+            info: 'background: linear-gradient(135deg, #6f42c1, #6610f2);'
+        };
+        
+        popupBar.style.cssText = styles.base + (styles[type] || styles.info);
+        
+        // Add to document
+        document.body.appendChild(popupBar);
+        
+        // Animate in
+        popupBar.style.opacity = '0';
+        popupBar.style.transform = 'translateX(-50%) translateY(-100%)';
+        
+        setTimeout(() => {
+            popupBar.style.opacity = '1';
+            popupBar.style.transform = 'translateX(-50%) translateY(0)';
+        }, 10);
+        
+        // Auto remove after duration (except for loading type)
+        if (type !== 'loading' && duration > 0) {
+            setTimeout(() => {
+                if (popupBar && popupBar.parentNode) {
+                    popupBar.style.opacity = '0';
+                    popupBar.style.transform = 'translateX(-50%) translateY(-100%)';
+                    setTimeout(() => {
+                        if (popupBar.parentNode) {
+                            popupBar.remove();
+                        }
+                    }, 300);
+                }
+            }, duration);
+        }
+        
+        return popupBar;
     }
 
     showSyncStatus(syncStatus, action = 'operation') {
@@ -598,6 +691,10 @@ class ProductionTracker {
                 if (result.sync_status) {
                     console.log('🚀 Create sync completed:', result.sync_status);
                     this.showSyncStatus(result.sync_status, 'create');
+                    
+                    // Show popup bar for successful Railway to local sync
+                    const syncTime = result.sync_status.duration_ms || 0;
+                    this.showPopupBar(`🚄 Railway updated local server successfully (${syncTime}ms)`, 'success', 4000);
                 }
                 
                 // Update UI first
@@ -618,6 +715,11 @@ class ProductionTracker {
                 const syncInfo = result.sync_status ? 
                     ` (Synced to Railway in ${result.sync_status.duration_ms || 0}ms)` : '';
                 alert((result.message || 'Entry submitted successfully!') + syncInfo);
+                
+                // Show failure popup if sync failed
+                if (result.sync_status && (result.sync_status.railway_push === 'failed' || result.sync_status.railway_pull === 'failed')) {
+                    this.showPopupBar('⚠️ Railway sync failed - entry saved locally only', 'warning', 5000);
+                }
             } else {
                 const error = await response.json();
                 
@@ -916,6 +1018,10 @@ class ProductionTracker {
                 if (result.sync_status) {
                     console.log('🚀 Update sync completed:', result.sync_status);
                     this.showSyncStatus(result.sync_status, 'update');
+                    
+                    // Show popup bar for successful Railway to local sync
+                    const syncTime = result.sync_status.duration_ms || 0;
+                    this.showPopupBar(`🚄 Railway updated local server successfully (${syncTime}ms)`, 'success', 4000);
                 }
                 
                 await this.loadProductionData();
@@ -934,6 +1040,11 @@ class ProductionTracker {
                 const syncInfo = result.sync_status ? 
                     ` (Synced to Railway in ${result.sync_status.duration_ms || 0}ms)` : '';
                 alert((result.message || 'Entry updated successfully!') + syncInfo);
+                
+                // Show failure popup if sync failed
+                if (result.sync_status && (result.sync_status.railway_push === 'failed' || result.sync_status.railway_pull === 'failed')) {
+                    this.showPopupBar('⚠️ Railway sync failed - update saved locally only', 'warning', 5000);
+                }
             } else {
                 alert('Error updating entry');
             }
@@ -1023,6 +1134,10 @@ class ProductionTracker {
                 if (result.sync_status) {
                     console.log('🚀 Delete sync completed:', result.sync_status);
                     this.showSyncStatus(result.sync_status, 'delete');
+                    
+                    // Show popup bar for successful Railway to local sync
+                    const syncTime = result.sync_status.duration_ms || 0;
+                    this.showPopupBar(`🚄 Railway updated local server successfully (${syncTime}ms)`, 'success', 4000);
                 }
                 
                 await this.loadProductionData();
@@ -1039,6 +1154,11 @@ class ProductionTracker {
                 const syncInfo = result.sync_status ? 
                     ` (Synced to Railway in ${result.sync_status.duration_ms || 0}ms)` : '';
                 alert((result.message || 'Entry deleted successfully!') + syncInfo);
+                
+                // Show failure popup if sync failed
+                if (result.sync_status && (result.sync_status.railway_push === 'failed' || result.sync_status.railway_pull === 'failed')) {
+                    this.showPopupBar('⚠️ Railway sync failed - deletion saved locally only', 'warning', 5000);
+                }
             } else {
                 alert('Error deleting entry');
             }
