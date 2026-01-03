@@ -18,7 +18,10 @@
         "PORT": "3000",
         "ENABLE_CLOUD_SYNC": "true",
         "ENABLE_LOCAL_EXCEL": "false",
-        "DATABASE_URL": "${{ animation-tracker-db.DATABASE_URL }}"
+        "DATABASE_URL": "${{ animation-tracker-db.DATABASE_URL }}",
+        "LOCAL_SERVER_URL": "",
+        "LOCAL_SERVER_API_KEY": "",
+        "API_SECRET": ""
       }
     }
   }

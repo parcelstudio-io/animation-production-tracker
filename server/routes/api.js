@@ -3,6 +3,9 @@ const db = require('../database/db');
 const syncService = require('../services/syncService');
 const directoryScanner = require('../services/directoryScanner');
 
+// Import node-fetch for making HTTP requests
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
 const router = express.Router();
 
 // Middleware for API key authentication
@@ -412,20 +415,115 @@ router.get('/sync/excel-data', async (req, res) => {
     }
 });
 
-// DEPRECATED: This endpoint is no longer used (Excel is now authoritative)
+// Sync FROM Railway database (for local server updates from Railway)
 router.post('/sync/from-railway', authenticateAPI, async (req, res) => {
-    console.log(`⚠️  /sync/from-railway endpoint called but Excel is now authoritative source`);
-    
-    res.json({
-        success: false,
-        message: 'Sync direction reversed: Excel file is now authoritative source',
-        excelIsAuthoritative: true,
-        railwayIsAuthoritative: false,
-        deprecatedEndpoint: true,
-        newBehavior: 'Railway syncs FROM local Excel file on startup',
-        redirectTo: '/api/sync/excel-data',
-        timestamp: new Date().toISOString()
-    });
+    try {
+        const { action, data } = req.body;
+        console.log(`📥 Received sync from Railway: ${action}`);
+        console.log(`📊 Data:`, data);
+        
+        let result;
+        
+        switch (action) {
+            case 'create':
+                console.log('➕ Creating new record from Railway sync...');
+                result = await db.insertRecord({
+                    animator: data.animator,
+                    project_type: data.project_type,
+                    episode_title: data.episode_title,
+                    scene: data.scene,
+                    shot: data.shot,
+                    week_yyyymmdd: data.week_yyyymmdd,
+                    status: data.status,
+                    notes: data.notes || '',
+                    railway_id: data.railway_id
+                });
+                break;
+                
+            case 'update':
+                console.log('✏️ Updating record from Railway sync...');
+                // Find record by Railway ID or content match
+                const records = await db.getAllRecords();
+                const recordToUpdate = records.find(r => 
+                    r.railway_id === data.railway_id ||
+                    (r.project_type === data.project_type && 
+                     r.episode_title === data.episode_title &&
+                     r.scene === data.scene && 
+                     r.shot === data.shot)
+                );
+                
+                if (recordToUpdate) {
+                    result = await db.updateRecord(recordToUpdate.id, {
+                        animator: data.animator,
+                        project_type: data.project_type,
+                        episode_title: data.episode_title,
+                        scene: data.scene,
+                        shot: data.shot,
+                        week_yyyymmdd: data.week_yyyymmdd,
+                        status: data.status,
+                        notes: data.notes || '',
+                        railway_id: data.railway_id
+                    });
+                } else {
+                    console.warn('⚠️ Record not found for update, creating new one');
+                    result = await db.insertRecord({
+                        animator: data.animator,
+                        project_type: data.project_type,
+                        episode_title: data.episode_title,
+                        scene: data.scene,
+                        shot: data.shot,
+                        week_yyyymmdd: data.week_yyyymmdd,
+                        status: data.status,
+                        notes: data.notes || '',
+                        railway_id: data.railway_id
+                    });
+                }
+                break;
+                
+            case 'delete':
+                console.log('🗑️ Deleting record from Railway sync...');
+                const recordsToDelete = await db.getAllRecords();
+                const recordToDelete = recordsToDelete.find(r => 
+                    r.railway_id === data.railway_id ||
+                    (r.project_type === data.project_type && 
+                     r.episode_title === data.episode_title &&
+                     r.scene === data.scene && 
+                     r.shot === data.shot)
+                );
+                
+                if (recordToDelete) {
+                    result = await db.deleteRecord(recordToDelete.id);
+                } else {
+                    console.warn('⚠️ Record not found for deletion');
+                    result = { changes: 0 };
+                }
+                break;
+                
+            default:
+                return res.status(400).json({ 
+                    success: false, 
+                    error: `Unknown action: ${action}` 
+                });
+        }
+        
+        console.log(`✅ Local server sync completed: ${action}`);
+        
+        res.json({
+            success: true,
+            action,
+            result,
+            message: `Successfully processed ${action} from Railway`,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('❌ Failed to process Railway sync:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to process Railway sync',
+            details: error.message 
+        });
+    }
 });
 
 router.post('/sync/to-railway', authenticateAPI, async (req, res) => {
@@ -460,6 +558,114 @@ router.get('/sync/status', authenticateAPI, async (req, res) => {
 
 // Frontend-compatible endpoints for real-time sync
 // These endpoints match what the frontend script.js expects
+
+// Railway app page load endpoint - sync with local server and return data
+router.get('/production-data/with-local-sync', async (req, res) => {
+    try {
+        console.log('🔄 Railway app page load - syncing with local server...');
+        
+        let localServerConnected = false;
+        let syncFromExcel = null;
+        let localServerStructure = null;
+        
+        // Step 1: Try to sync FROM local server (Excel is authoritative)
+        try {
+            const localServerUrl = process.env.LOCAL_SERVER_URL;
+            const apiKey = process.env.LOCAL_SERVER_API_KEY;
+            
+            if (localServerUrl) {
+                console.log('📥 Fetching Excel data from local server...');
+                
+                const headers = { 'Content-Type': 'application/json' };
+                if (apiKey) headers['x-api-key'] = apiKey;
+                
+                const excelResponse = await fetch(`${localServerUrl}/api/sync/excel-data`, { headers });
+                
+                if (excelResponse.ok) {
+                    const excelData = await excelResponse.json();
+                    
+                    if (excelData.success && excelData.data) {
+                        console.log(`📊 Retrieved ${excelData.data.length} records from local Excel`);
+                        
+                        // Sync this data to Railway database
+                        const railwayFormat = excelData.data.map(record => ({
+                            animator: record.animator,
+                            project_type: record.project_type,
+                            episode_title: record.episode_title,
+                            scene: record.scene,
+                            shot: record.shot,
+                            week_yyyymmdd: record.week_yyyymmdd,
+                            status: record.status,
+                            notes: record.notes
+                        }));
+                        
+                        // Replace Railway data with Excel data (Excel is authoritative)
+                        await db.replaceAllRecords(railwayFormat);
+                        
+                        localServerConnected = true;
+                        syncFromExcel = {
+                            success: true,
+                            recordsCount: excelData.data.length,
+                            message: 'Railway synchronized with local Excel data'
+                        };
+                        
+                        console.log('✅ Railway database updated with Excel data');
+                    }
+                }
+                
+                // Step 2: Try to get directory structure from local server
+                const structureResponse = await fetch(`${localServerUrl}/api/structure`, { headers });
+                if (structureResponse.ok) {
+                    localServerStructure = await structureResponse.json();
+                    console.log('📁 Directory structure fetched from local server');
+                }
+            }
+        } catch (localError) {
+            console.warn('⚠️ Failed to sync with local server:', localError.message);
+            syncFromExcel = {
+                success: false,
+                error: localError.message,
+                message: 'Failed to sync with local Excel file'
+            };
+        }
+        
+        // Step 3: Get current Railway data (should now be synced with Excel)
+        const productionData = await db.getAllRecords();
+        
+        // Convert to frontend format
+        const frontendData = productionData.map(record => ({
+            'Animator': record.animator,
+            'Project Type': record.project_type,
+            'Episode/Title': record.episode_title,
+            'Scene': record.scene,
+            'Shot': record.shot,
+            'Week (YYYYMMDD)': record.week_yyyymmdd,
+            'Status': record.status,
+            'Notes': record.notes,
+            '_id': record.id,
+            '_railway_id': record.railway_id
+        }));
+        
+        console.log(`📊 Returning ${frontendData.length} records to Railway frontend`);
+        
+        res.json({
+            success: true,
+            data: frontendData,
+            localServerConnected,
+            syncFromExcel,
+            localServerStructure: localServerStructure ? { structure: localServerStructure } : null,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('❌ Failed to load page data with sync:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to load page data',
+            details: error.message
+        });
+    }
+});
 
 // Get all production data (frontend format)
 router.get('/production-data', async (req, res) => {
