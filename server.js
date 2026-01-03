@@ -28,70 +28,34 @@ async function initializeApp() {
     // Initialize Excel file
     initializeExcelFile();
     
-    // 🎯 CRITICAL: Sync Railway database FROM local Excel file (Excel is authoritative)
-    const syncSuccess = await syncFromLocalExcelFile();
+    // Initialize Railway PostgreSQL database as authoritative source
+    const dbInitialized = await initializeDatabase();
     
-    if (!syncSuccess) {
-        // Schedule a delayed retry in case local server is starting up
-        console.log('⏰ Scheduling delayed startup sync in 30 seconds...');
-        setTimeout(async () => {
-            console.log('🔄 DELAYED STARTUP SYNC: Attempting Excel sync after delay...');
-            const delayedSyncSuccess = await syncFromLocalExcelFile();
-            if (delayedSyncSuccess) {
-                console.log('✅ DELAYED SYNC SUCCESS: Excel data loaded after delay');
-            } else {
-                console.log('⚠️ DELAYED SYNC FAILED: Excel data still not accessible');
-                console.log('💡 Manual sync available via page refresh or /api/production-data/with-local-sync');
-            }
-        }, 30000);
-    }
+    // Database is now ready as primary source
     
     console.log('✅ Application initialized successfully');
 }
 
-// Sync Railway database FROM local Excel file (Excel = ground truth)
-async function syncFromLocalExcelFile() {
-    console.log('🎯 STARTUP SYNC: Syncing Railway database FROM local Excel file...');
-    console.log('📊 Excel file is the authoritative source of truth');
+// Initialize Railway PostgreSQL database as primary data source
+async function initializeDatabase() {
+    console.log('🎯 INITIALIZING: Railway PostgreSQL as authoritative data source');
     
     try {
         // Check if database connection is available
         if (!db.isEnabled()) {
-            console.log('⚠️ Database not available - skipping startup sync');
+            console.log('⚠️ Database not enabled - check ENABLE_CLOUD_SYNC environment variable');
             return false;
         }
         
-        console.log('🔄 Attempting to fetch latest data from local Excel file...');
-        
-        // Try to fetch data from local server with retry logic
-        const localServerData = await fetchFromLocalServerWithRetry();
-        
-        if (localServerData && localServerData.length > 0) {
-            console.log(`📥 SUCCESS: Found ${localServerData.length} records in local Excel file`);
-            console.log('🗃️ Replacing Railway database with Excel data...');
-            
-            // Clear and replace Railway database with Excel data
-            await db.replaceAllRecords(localServerData);
-            
-            console.log('✅ STARTUP SYNC COMPLETE: Railway database synchronized with Excel file');
-            console.log(`📊 Database now contains ${localServerData.length} records from Excel`);
-            return true;
-            
-        } else {
-            console.log('⚠️ STARTUP SYNC FAILED: No local server data available');
-            console.log('📋 Possible reasons:');
-            console.log('   - Local server not running');
-            console.log('   - Excel file not found or empty');
-            console.log('   - Network connectivity issues');
-            console.log('   - Environment variables not configured');
-            console.log('🎯 Railway database will use existing data (may be empty or outdated)');
-            return false;
-        }
+        // Test database connection and tables
+        const dbData = await db.getAllData();
+        console.log(`📊 Railway PostgreSQL database ready with ${dbData.length} production records`);
+        console.log('✅ DATABASE INITIALIZED: Railway PostgreSQL is the source of truth');
+        return true;
         
     } catch (error) {
-        console.error('❌ STARTUP SYNC ERROR:', error.message);
-        console.log('📊 Railway database will continue with existing data');
-        console.log('💡 To resolve: Ensure local server is running with Excel file');
+        console.error('❌ DATABASE INITIALIZATION ERROR:', error.message);
+        console.log('💡 To resolve: Check DATABASE_URL and table setup');
         return false;
     }
 }
@@ -1242,65 +1206,31 @@ const originalGetProductionData = app._router.stack.find(layer =>
 // Query local server when users visit the app (Excel is authoritative)
 app.get('/api/production-data/with-local-sync', async (req, res) => {
   try {
-    console.log('🔄 User refreshed page - syncing from local Excel file...');
+    console.log('🔄 User refreshed page - loading from Railway PostgreSQL database...');
     
-    // 🎯 SYNC FROM LOCAL EXCEL FILE (authoritative source)
-    let syncResult = null;
-    let localServerConnected = false;
-    
-    try {
-      // Fetch latest data from local Excel file
-      const localServerData = await fetchFromLocalServer();
-      
-      if (localServerData && localServerData.length > 0) {
-        localServerConnected = true;
-        console.log(`📥 Found ${localServerData.length} records in local Excel file`);
-        
-        // Replace Railway database with Excel data (Excel is authoritative)
-        await db.replaceAllRecords(localServerData);
-        syncResult = {
-          success: true,
-          recordsCount: localServerData.length,
-          message: 'Railway database synchronized with local Excel file'
-        };
-        console.log('✅ Railway database updated from Excel file');
-      } else {
-        console.log('⚠️ No local server data available');
-        syncResult = {
-          success: false,
-          message: 'Local server not available or no data found'
-        };
-      }
-    } catch (syncError) {
-      console.error('❌ Failed to sync from local Excel:', syncError);
-      syncResult = {
-        success: false,
-        error: syncError.message,
-        message: 'Failed to sync from local Excel file'
-      };
-    }
-    
-    // Get current Railway data (should now match Excel)
+    // 🎯 RAILWAY POSTGRESQL IS AUTHORITATIVE SOURCE
     const productionData = await db.getAllProductions();
+    console.log(`📊 Loaded ${productionData.length} records from Railway PostgreSQL database`);
     
-    // Query local server for directory structure
-    const localStructure = await queryLocalServerForStructure();
+    // Query local server for directory structure only
+    let localStructure = null;
+    try {
+      localStructure = await queryLocalServerForStructure();
+    } catch (structureError) {
+      console.log('⚠️ Directory structure not available from local server');
+    }
     
     res.json({
       success: true,
       data: productionData,
-      localServerConnected: localServerConnected,
       localServerStructure: localStructure,
-      syncFromExcel: syncResult,
-      excelIsAuthoritative: true,
-      message: localServerConnected ? 
-        'Data synchronized from local Excel file' : 
-        'Using Railway data (local server not available)',
+      databaseIsAuthoritative: true,
+      message: 'Data loaded from Railway PostgreSQL database',
       timestamp: new Date().toISOString()
     });
     
   } catch (error) {
-    console.error('❌ Failed to get production data with local sync:', error);
+    console.error('❌ Failed to get production data:', error);
     res.status(500).json({ 
       error: 'Failed to retrieve data',
       details: error.message 
@@ -1332,24 +1262,24 @@ initializeApp().then(() => {
     console.log(`☁️  Cloud sync: ${process.env.CLOUD_WEBAPP_URL ? 'Enabled' : 'Disabled'}`);
     
     // Excel sync status
-    console.log(`\n📋 EXCEL SYNC CONFIGURATION:`);
-    console.log(`🎯 Excel Authority: ${process.env.LOCAL_SERVER_URL ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`🔗 Local Server: ${process.env.LOCAL_SERVER_URL || 'Not configured'}`);
-    console.log(`🔑 API Key: ${process.env.LOCAL_SERVER_API_KEY ? 'Configured' : 'Not configured'}`);
+    console.log(`\n📋 DATABASE CONFIGURATION:`);
+    console.log(`🎯 Primary Source: Railway PostgreSQL Database`);
+    console.log(`📊 Status: ${db.isEnabled() ? 'CONNECTED' : 'DISCONNECTED'}`);
+    console.log(`🔗 Local Server: ${process.env.LOCAL_SERVER_URL || 'Not configured'} (for directory structure only)`);
     
-    if (process.env.LOCAL_SERVER_URL && process.env.LOCAL_SERVER_API_KEY) {
-      console.log(`\n✅ STARTUP SYNC: Railway database synced from Excel file`);
-      console.log(`📄 Source: production_summary.xlsx (authoritative)`);
-      console.log(`📡 Method: Automatic sync on server startup + page refresh`);
+    if (db.isEnabled()) {
+      console.log(`\n✅ RAILWAY DATABASE: PostgreSQL is the authoritative source`);
+      console.log(`📊 Table: production_summary`);
+      console.log(`🔄 Sync: Real-time with local server for notifications only`);
     } else {
-      console.log(`\n⚠️  EXCEL SYNC DISABLED: Missing configuration`);
-      console.log(`💡 To enable: Set LOCAL_SERVER_URL and LOCAL_SERVER_API_KEY`);
-      console.log(`📊 Using Railway database only (may be empty)`);
+      console.log(`\n⚠️  DATABASE NOT ENABLED: Check ENABLE_CLOUD_SYNC environment variable`);
+      console.log(`💡 To enable: Set ENABLE_CLOUD_SYNC=true in Railway`);
+      console.log(`📊 Fallback: Excel file only`);
     }
     
     console.log('\n' + '='.repeat(70));
-    console.log('🎯 Excel file is the authoritative source of production data');
-    console.log('🔄 Database syncs FROM Excel on startup and page refresh');
+    console.log('🎯 Railway PostgreSQL database is the authoritative source of production data');
+    console.log('📊 All CRUD operations happen directly on PostgreSQL');
     console.log('='.repeat(70) + '\n');
   });
 }).catch(error => {
