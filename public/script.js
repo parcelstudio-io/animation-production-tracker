@@ -18,15 +18,9 @@ class ProductionTracker {
         try {
             console.log('🔄 Page refresh detected - syncing from Excel file...');
             
-            // Show initial loading popup
-            this.showPopupBar('🔄 Loading directory information...', 'loading');
-            
             // Load Railway data first (may be outdated)
             await this.loadDirectoryStructure();
             await this.loadProductionData();
-            
-            // Show success popup for directory fetch
-            this.showPopupBar('✅ Directory information loaded successfully', 'success', 3000);
             
             // 🎯 CRITICAL: Sync Railway database FROM Excel file (Excel is authoritative)
             await this.fetchFromLocalServer();
@@ -51,9 +45,9 @@ class ProductionTracker {
                     console.log(`✅ Excel sync successful - ${result.syncFromExcel.recordsCount} records`);
                     console.log('📊 Railway database updated with Excel data');
                     
-                    // Show popup bar for successful Excel sync
+                    // Show single unified popup bar for successful sync
                     const recordCount = result.syncFromExcel.recordsCount || 0;
-                    this.showPopupBar(`📊 Excel sync successful: ${recordCount} records synchronized`, 'success', 5000);
+                    this.showPopupBar(`✅ Data synchronized successfully: ${recordCount} records loaded`, 'success', 4000);
                     
                     // Reload production data (now synced with Excel)
                     await this.loadProductionData();
@@ -71,37 +65,13 @@ class ProductionTracker {
                     
                 } else {
                     console.log('⚠️ Local server not available - using existing Railway data');
-                    
-                    // Show warning popup for Excel sync failure
-                    this.showPopupBar('⚠️ Excel file not accessible - using Railway data only', 'warning', 6000);
-                    
-                    this.showSyncStatus(false, 'Excel file not accessible', {
-                        success: false,
-                        message: result.syncFromExcel?.message || 'Local server not available'
-                    });
                 }
             } else {
                 console.error('❌ Failed to sync from Excel file');
-                
-                // Show error popup for Excel sync failure
-                this.showPopupBar('❌ Excel sync failed - check local server connection', 'error', 6000);
-                
-                this.showSyncStatus(false, 'Excel sync failed', {
-                    success: false,
-                    error: result.error || 'Unknown error'
-                });
             }
             
         } catch (error) {
             console.error('❌ Excel sync error:', error);
-            
-            // Show error popup for Excel sync error
-            this.showPopupBar('❌ Excel sync error - local server unreachable', 'error', 6000);
-            
-            this.showSyncStatus(false, 'Excel sync error', {
-                success: false,
-                error: error.message
-            });
         }
     }
 
@@ -692,9 +662,9 @@ class ProductionTracker {
                     console.log('🚀 Create sync completed:', result.sync_status);
                     this.showSyncStatus(result.sync_status, 'create');
                     
-                    // Show popup bar for successful Railway to local sync
+                    // Show unified sync success popup
                     const syncTime = result.sync_status.duration_ms || 0;
-                    this.showPopupBar(`🚄 Railway updated local server successfully (${syncTime}ms)`, 'success', 4000);
+                    this.showPopupBar(`✅ Entry created and synced successfully (${syncTime}ms)`, 'success', 4000);
                 }
                 
                 // Update UI first
@@ -718,7 +688,7 @@ class ProductionTracker {
                 
                 // Show failure popup if sync failed
                 if (result.sync_status && (result.sync_status.railway_push === 'failed' || result.sync_status.railway_pull === 'failed')) {
-                    this.showPopupBar('⚠️ Railway sync failed - entry saved locally only', 'warning', 5000);
+                    this.showPopupBar('⚠️ Entry saved - sync failed', 'warning', 5000);
                 }
             } else {
                 const error = await response.json();
@@ -1019,9 +989,9 @@ class ProductionTracker {
                     console.log('🚀 Update sync completed:', result.sync_status);
                     this.showSyncStatus(result.sync_status, 'update');
                     
-                    // Show popup bar for successful Railway to local sync
+                    // Show unified sync success popup
                     const syncTime = result.sync_status.duration_ms || 0;
-                    this.showPopupBar(`🚄 Railway updated local server successfully (${syncTime}ms)`, 'success', 4000);
+                    this.showPopupBar(`✅ Entry updated and synced successfully (${syncTime}ms)`, 'success', 4000);
                 }
                 
                 await this.loadProductionData();
@@ -1043,7 +1013,7 @@ class ProductionTracker {
                 
                 // Show failure popup if sync failed
                 if (result.sync_status && (result.sync_status.railway_push === 'failed' || result.sync_status.railway_pull === 'failed')) {
-                    this.showPopupBar('⚠️ Railway sync failed - update saved locally only', 'warning', 5000);
+                    this.showPopupBar('⚠️ Entry updated - sync failed', 'warning', 5000);
                 }
             } else {
                 alert('Error updating entry');
@@ -1135,9 +1105,9 @@ class ProductionTracker {
                     console.log('🚀 Delete sync completed:', result.sync_status);
                     this.showSyncStatus(result.sync_status, 'delete');
                     
-                    // Show popup bar for successful Railway to local sync
+                    // Show unified sync success popup
                     const syncTime = result.sync_status.duration_ms || 0;
-                    this.showPopupBar(`🚄 Railway updated local server successfully (${syncTime}ms)`, 'success', 4000);
+                    this.showPopupBar(`✅ Entry deleted and synced successfully (${syncTime}ms)`, 'success', 4000);
                 }
                 
                 await this.loadProductionData();
@@ -1157,7 +1127,7 @@ class ProductionTracker {
                 
                 // Show failure popup if sync failed
                 if (result.sync_status && (result.sync_status.railway_push === 'failed' || result.sync_status.railway_pull === 'failed')) {
-                    this.showPopupBar('⚠️ Railway sync failed - deletion saved locally only', 'warning', 5000);
+                    this.showPopupBar('⚠️ Entry deleted - sync failed', 'warning', 5000);
                 }
             } else {
                 alert('Error deleting entry');
