@@ -701,14 +701,6 @@ app.post('/api/production-data', async (req, res) => {
       }
     }
     
-    // Send webhook to cloud if configured
-    if (process.env.CLOUD_WEBAPP_URL) {
-      try {
-        await sendWebhookToCloud('data_updated', newEntry);
-      } catch (webhookError) {
-        console.warn('⚠️  Webhook failed:', webhookError.message);
-      }
-    }
     
     // Notify local server if configured
     try {
@@ -877,94 +869,10 @@ app.post('/api/sync/full', async (req, res) => {
 app.get('/api/sync/status', (req, res) => {
   res.json({
     databaseEnabled: db.isEnabled(),
-    cloudSyncEnabled: !!process.env.CLOUD_WEBAPP_URL,
     environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Webhook endpoints for cloud sync
-app.post('/webhook/sync-from-cloud', async (req, res) => {
-  try {
-    // Verify webhook signature if configured
-    const signature = req.headers['x-webhook-signature'];
-    if (process.env.WEBHOOK_SECRET && signature) {
-      const computedSignature = crypto
-        .createHmac('sha256', process.env.WEBHOOK_SECRET)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-      
-      if (signature !== `sha256=${computedSignature}`) {
-        return res.status(401).json({ error: 'Invalid signature' });
-      }
-    }
-    
-    const { action, data } = req.body;
-    console.log('📩 Webhook received:', action);
-    
-    // Update local Excel file with cloud data
-    if (action === 'data_updated' && data) {
-      const excelData = readExcelData();
-      
-      // Find and update or add the entry
-      const existingIndex = excelData.findIndex(item => 
-        item.Animator === data.Animator &&
-        item['Project Type'] === data['Project Type'] &&
-        item['Episode/Title'] === data['Episode/Title'] &&
-        item.Scene === data.Scene &&
-        item.Shot === data.Shot &&
-        item['Week (YYYYMMDD)'] === data['Week (YYYYMMDD)']
-      );
-      
-      if (existingIndex !== -1) {
-        excelData[existingIndex] = data;
-      } else {
-        excelData.push(data);
-      }
-      
-      writeExcelData(excelData);
-      console.log('✅ Local Excel updated from cloud webhook');
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('❌ Webhook processing failed:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
-// Helper function to send webhooks to cloud
-async function sendWebhookToCloud(action, data) {
-  if (!process.env.CLOUD_WEBAPP_URL) {
-    return;
-  }
-  
-  try {
-    const webhookUrl = `${process.env.CLOUD_WEBAPP_URL}/webhook/sync-from-local`;
-    const payload = { action, data };
-    
-    if (process.env.WEBHOOK_SECRET) {
-      const signature = crypto
-        .createHmac('sha256', process.env.WEBHOOK_SECRET)
-        .update(JSON.stringify(payload))
-        .digest('hex');
-      
-      await axios.post(webhookUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Signature': `sha256=${signature}`
-        },
-        timeout: 5000
-      });
-    } else {
-      await axios.post(webhookUrl, payload, { timeout: 5000 });
-    }
-    
-    console.log('✅ Webhook sent to cloud successfully');
-  } catch (error) {
-    console.error('❌ Failed to send webhook to cloud:', error.message);
-    throw error;
-  }
-}
 
 // Local server sync endpoints for Railway → Local communication
 // Database connection test endpoint
@@ -1259,7 +1167,6 @@ initializeApp().then(() => {
     console.log('='.repeat(70));
     console.log(`🌐 Server URL: http://localhost:${PORT}`);
     console.log(`📊 Database: ${db.isEnabled() ? 'Connected (PostgreSQL)' : 'Disabled (Excel-only mode)'}`);
-    console.log(`☁️  Cloud sync: ${process.env.CLOUD_WEBAPP_URL ? 'Enabled' : 'Disabled'}`);
     
     // Excel sync status
     console.log(`\n📋 DATABASE CONFIGURATION:`);
