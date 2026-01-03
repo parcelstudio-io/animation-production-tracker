@@ -16,13 +16,13 @@ class ProductionTracker {
 
     async loadPageData() {
         try {
-            console.log('🔄 Loading page data from both Railway and local server...');
+            console.log('🔄 Page refresh detected - syncing from Excel file...');
             
-            // Load Railway data first
+            // Load Railway data first (may be outdated)
             await this.loadDirectoryStructure();
             await this.loadProductionData();
             
-            // Then fetch updated data from local server
+            // 🎯 CRITICAL: Sync Railway database FROM Excel file (Excel is authoritative)
             await this.fetchFromLocalServer();
             
         } catch (error) {
@@ -32,38 +32,53 @@ class ProductionTracker {
 
     async fetchFromLocalServer() {
         try {
-            console.log('📥 Fetching structure and production data from local server...');
+            console.log('📥 Syncing from local Excel file (authoritative source)...');
             
-            // Call the Railway endpoint that queries local server
+            // Call the Railway endpoint that syncs from local Excel file
             const response = await fetch('/api/production-data/with-local-sync');
             const result = await response.json();
             
-            if (result.success && result.localServerConnected) {
-                console.log('✅ Local server connected - updating data');
-                
-                // Update production data if local server provided it
-                if (result.localServerData) {
-                    console.log(`📊 Updated ${result.localServerData.length} production records from local server`);
-                    this.mergeProductionData(result.localServerData);
+            if (result.success) {
+                // Show sync status
+                if (result.localServerConnected && result.syncFromExcel?.success) {
+                    console.log(`✅ Excel sync successful - ${result.syncFromExcel.recordsCount} records`);
+                    console.log('📊 Railway database updated with Excel data');
+                    
+                    // Reload production data (now synced with Excel)
+                    await this.loadProductionData();
+                    this.renderTable();
+                    
+                    // Update structure data if local server provided it
+                    if (result.localServerStructure && result.localServerStructure.structure) {
+                        console.log('📁 Updating directory structure from local server');
+                        this.directoryStructure = result.localServerStructure.structure;
+                        this.populateProjectDropdown(); // Refresh dropdowns with new structure
+                    }
+                    
+                    // Show success indicator with sync details
+                    this.showSyncStatus(true, `Excel sync: ${result.syncFromExcel.recordsCount} records`, result.syncFromExcel);
+                    
+                } else {
+                    console.log('⚠️ Local server not available - using existing Railway data');
+                    this.showSyncStatus(false, 'Excel file not accessible', {
+                        success: false,
+                        message: result.syncFromExcel?.message || 'Local server not available'
+                    });
                 }
-                
-                // Update structure data if local server provided it
-                if (result.localServerStructure && result.localServerStructure.structure) {
-                    console.log('📁 Updating directory structure from local server');
-                    this.directoryStructure = result.localServerStructure.structure;
-                    this.populateProjectDropdown(); // Refresh dropdowns with new structure
-                }
-                
-                // Show success indicator
-                this.showLocalServerStatus(true, 'Connected to local server');
             } else {
-                console.log('⚠️ Local server not available - using Railway data only');
-                this.showLocalServerStatus(false, 'Local server not available');
+                console.error('❌ Failed to sync from Excel file');
+                this.showSyncStatus(false, 'Excel sync failed', {
+                    success: false,
+                    error: result.error || 'Unknown error'
+                });
             }
             
         } catch (error) {
-            console.warn('❌ Failed to fetch from local server:', error);
-            this.showLocalServerStatus(false, 'Local server connection failed');
+            console.error('❌ Excel sync error:', error);
+            this.showSyncStatus(false, 'Excel sync error', {
+                success: false,
+                error: error.message
+            });
         }
     }
 
@@ -106,32 +121,83 @@ class ProductionTracker {
     }
 
     showLocalServerStatus(connected, message) {
-        // Create or update status indicator
-        let statusDiv = document.getElementById('local-server-status');
+        // Legacy method - redirect to new sync status method
+        this.showSyncStatus(connected, message, { success: connected });
+    }
+
+    showSyncStatus(success, message, details) {
+        // Create or update sync status indicator
+        let statusDiv = document.getElementById('excel-sync-status');
         if (!statusDiv) {
             statusDiv = document.createElement('div');
-            statusDiv.id = 'local-server-status';
+            statusDiv.id = 'excel-sync-status';
             statusDiv.style.cssText = `
                 position: fixed;
                 top: 10px;
                 right: 10px;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-size: 12px;
+                padding: 12px 16px;
+                border-radius: 6px;
+                font-size: 13px;
                 color: white;
                 z-index: 1000;
-                transition: opacity 0.3s;
+                transition: all 0.3s;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                max-width: 320px;
+                cursor: pointer;
             `;
             document.body.appendChild(statusDiv);
+            
+            // Click to show details
+            statusDiv.addEventListener('click', () => {
+                this.showSyncDetails(details);
+            });
         }
         
-        statusDiv.textContent = `🖥️ ${message}`;
-        statusDiv.style.backgroundColor = connected ? '#28a745' : '#dc3545';
+        const icon = success ? '✅' : '⚠️';
+        const bgColor = success ? '#28a745' : '#dc3545';
         
-        // Auto-hide after 3 seconds
-        setTimeout(() => {
-            statusDiv.style.opacity = '0.7';
-        }, 3000);
+        statusDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px;">${icon}</span>
+                <div>
+                    <div style="font-weight: 600;">${success ? 'Excel Sync' : 'Sync Warning'}</div>
+                    <div style="font-size: 11px; opacity: 0.9;">${message}</div>
+                </div>
+            </div>
+        `;
+        
+        statusDiv.style.backgroundColor = bgColor;
+        statusDiv.style.opacity = '1';
+        
+        // Auto-fade after 5 seconds for success, stay visible for warnings
+        if (success) {
+            setTimeout(() => {
+                statusDiv.style.opacity = '0.8';
+            }, 5000);
+        }
+    }
+
+    showSyncDetails(details) {
+        if (!details) return;
+        
+        let message = '📊 Excel Sync Details\n\n';
+        
+        if (details.success) {
+            message += `✅ Status: Success\n`;
+            message += `📄 Records: ${details.recordsCount || 'Unknown'}\n`;
+            message += `🎯 Source: Local Excel File (Authoritative)\n`;
+            message += `📡 Target: Railway Database\n`;
+            message += `⏰ Time: ${new Date().toLocaleTimeString()}\n\n`;
+            message += `${details.message || 'Railway database synchronized with Excel file'}`;
+        } else {
+            message += `❌ Status: Failed\n`;
+            message += `🔗 Local Server: Not Available\n`;
+            message += `📊 Fallback: Using Railway Data\n`;
+            message += `⚠️ Warning: Data may not be current\n\n`;
+            message += `Error: ${details.error || details.message || 'Unknown error'}`;
+        }
+        
+        alert(message);
     }
 
     async syncToLocalServer(data, action) {
@@ -175,6 +241,9 @@ class ProductionTracker {
         try {
             const response = await fetch('/api/production-data');
             this.productionData = await response.json();
+            
+            // Populate episode filter dropdown after data loads
+            this.populateEpisodeFilterDropdown();
         } catch (error) {
             console.error('Error loading production data:', error);
         }
@@ -340,7 +409,9 @@ class ProductionTracker {
 
         shotSelect.innerHTML = '<option value="">Select Shot</option>';
 
-        if (projectType === 'long-form') {
+        let shotsAdded = false;
+
+        if (projectType === 'long-form' && this.directoryStructure?.episodes) {
             const episode = this.directoryStructure.episodes.find(ep => ep.name === episodeName);
             if (episode) {
                 const sceneShots = episode.shots.filter(shot => shot.scene === sceneName);
@@ -356,8 +427,9 @@ class ProductionTracker {
                     option.textContent = shotData.shot;
                     shotSelect.appendChild(option);
                 });
+                shotsAdded = sceneShots.length > 0;
             }
-        } else if (projectType === 'short-form') {
+        } else if (projectType === 'short-form' && this.directoryStructure?.shortForms) {
             const shortForm = this.directoryStructure.shortForms.find(sf => sf.name === episodeName);
             if (shortForm) {
                 const sceneShots = shortForm.shots.filter(shot => shot.scene === sceneName);
@@ -373,8 +445,34 @@ class ProductionTracker {
                     option.textContent = shotData.shot;
                     shotSelect.appendChild(option);
                 });
+                shotsAdded = sceneShots.length > 0;
             }
         }
+
+        // If no shots were found from directory structure, provide default shot options
+        if (!shotsAdded) {
+            this.addDefaultShotOptions(shotSelect);
+        }
+    }
+
+    addDefaultShotOptions(shotSelect) {
+        // Add comprehensive shot options (30+ shots)
+        const defaultShots = [
+            'SH_01', 'SH_02', 'SH_03', 'SH_04', 'SH_05', 'SH_06', 'SH_07', 'SH_08', 'SH_09', 'SH_10',
+            'SH_11', 'SH_12', 'SH_13', 'SH_14', 'SH_15', 'SH_16', 'SH_17', 'SH_18', 'SH_19', 'SH_20',
+            'SH_21', 'SH_22', 'SH_23', 'SH_24', 'SH_25', 'SH_26', 'SH_27', 'SH_28', 'SH_29', 'SH_30',
+            'SH_31', 'SH_32', 'SH_33', 'SH_34', 'SH_35', 'SH_36', 'SH_37', 'SH_38', 'SH_39', 'SH_40',
+            'SH_41', 'SH_42', 'SH_43', 'SH_44', 'SH_45', 'SH_46', 'SH_47', 'SH_48', 'SH_49', 'SH_50'
+        ];
+
+        defaultShots.forEach(shotName => {
+            const option = document.createElement('option');
+            option.value = shotName;
+            option.textContent = shotName;
+            shotSelect.appendChild(option);
+        });
+
+        console.log(`📹 Added ${defaultShots.length} default shot options`);
     }
 
     clearSceneShot() {
@@ -390,10 +488,6 @@ class ProductionTracker {
         document.getElementById('submissionForm').addEventListener('submit', (e) => {
             e.preventDefault();
             this.submitEntry();
-        });
-
-        document.getElementById('filterWeek').addEventListener('click', () => {
-            this.filterByWeek();
         });
 
         document.getElementById('showAll').addEventListener('click', () => {
@@ -413,6 +507,14 @@ class ProductionTracker {
             if (e.key === 'Enter') {
                 this.filterByWeek();
             }
+        });
+
+        document.getElementById('applyFilters').addEventListener('click', () => {
+            this.applyAdditionalFilters();
+        });
+
+        document.getElementById('clearFilters').addEventListener('click', () => {
+            this.clearAllFilters();
         });
 
         document.getElementById('saveEdit').addEventListener('click', () => {
@@ -451,7 +553,15 @@ class ProductionTracker {
                 
                 // Update UI first
                 await this.loadProductionData();
-                this.renderTable();
+                
+                // Re-apply current filter if one is active
+                const currentFilter = document.getElementById('weekFilter').value;
+                if (currentFilter) {
+                    this.filterByWeek();
+                } else {
+                    this.renderTable();
+                }
+                
                 document.getElementById('submissionForm').reset();
                 this.clearSceneShot();
                 
@@ -461,7 +571,23 @@ class ProductionTracker {
                 alert(result.message || 'Entry submitted successfully!');
             } else {
                 const error = await response.json();
-                alert(error.error || 'Error submitting entry');
+                
+                // Handle duplicate error specifically
+                if (response.status === 400 && error.error === 'Duplicate scene/shot combination detected') {
+                    const existing = error.existingEntry;
+                    const message = `⚠️ DUPLICATE DETECTED\n\n` +
+                        `This scene/shot combination already exists:\n\n` +
+                        `${error.conflictDetails}\n\n` +
+                        `Currently assigned to: ${existing.animator}\n` +
+                        `Week: ${existing.week}\n` +
+                        `Status: ${existing.status}\n\n` +
+                        `Each scene/shot can only be assigned to one animator. ` +
+                        `Please choose a different scene/shot combination.`;
+                    
+                    alert(message);
+                } else {
+                    alert(error.error || error.message || 'Error submitting entry');
+                }
             }
         } catch (error) {
             console.error('Error submitting entry:', error);
@@ -503,14 +629,31 @@ class ProductionTracker {
             return;
         }
 
-        try {
-            const response = await fetch(`/api/weekly-summary/${week}`);
-            const weeklyData = await response.json();
-            
-            const tbody = document.querySelector('#productionTable tbody');
-            tbody.innerHTML = '';
+        // Filter the current production data locally by the selected week
+        const filteredData = this.productionData.filter(item => {
+            return item['Week (YYYYMMDD)'] === week;
+        });
 
-            weeklyData.forEach((item, index) => {
+        // Clear and render filtered table
+        const tbody = document.querySelector('#productionTable tbody');
+        tbody.innerHTML = '';
+
+        if (filteredData.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="9" style="text-align: center;">No entries found for this week</td>';
+            tbody.appendChild(row);
+        } else {
+            filteredData.forEach((item, originalIndex) => {
+                // Find the original index in productionData for edit/delete operations
+                const realIndex = this.productionData.findIndex(dataItem => 
+                    dataItem.Animator === item.Animator &&
+                    dataItem['Project Type'] === item['Project Type'] &&
+                    dataItem['Episode/Title'] === item['Episode/Title'] &&
+                    dataItem.Scene === item.Scene &&
+                    dataItem.Shot === item.Shot &&
+                    dataItem['Week (YYYYMMDD)'] === item['Week (YYYYMMDD)']
+                );
+
                 const row = document.createElement('tr');
                 const statusClass = item.Status ? `status-${item.Status.toLowerCase().replace(' ', '-')}` : '';
                 
@@ -520,26 +663,133 @@ class ProductionTracker {
                     <td>${item['Episode/Title'] || ''}</td>
                     <td>${item.Scene || ''}</td>
                     <td>${item.Shot || ''}</td>
-                    <td>${item['Week Sent (YYYYMMDD)'] || ''}</td>
-                    <td>${item['Week Approved (YYYYMMDD)'] || ''}</td>
+                    <td>${item['Week (YYYYMMDD)'] || ''}</td>
                     <td class="${statusClass}">${item.Status || ''}</td>
                     <td>${item.Notes || ''}</td>
                     <td>
-                        <button class="btn-view" onclick="tracker.renderTable()">View All</button>
+                        <button class="btn-edit" onclick="tracker.showEditModal(${realIndex})">Edit</button>
+                        <button class="btn-delete" onclick="tracker.confirmDelete(${realIndex})">×</button>
                     </td>
                 `;
                 tbody.appendChild(row);
             });
-
-            if (weeklyData.length === 0) {
-                const row = document.createElement('tr');
-                row.innerHTML = '<td colspan="10" style="text-align: center;">No entries found for this week</td>';
-                tbody.appendChild(row);
-            }
-        } catch (error) {
-            console.error('Error filtering by week:', error);
-            alert('Error loading weekly data');
         }
+
+        console.log(`📅 Filtered by week ${week}: ${filteredData.length} entries found`);
+    }
+
+    applyAdditionalFilters() {
+        const animatorFilter = document.getElementById('animatorFilter').value;
+        const episodeFilter = document.getElementById('episodeFilter').value;
+        const notesFilter = document.getElementById('notesFilter').value.toLowerCase().trim();
+
+        let filteredData = [...this.productionData];
+
+        // Apply animator filter
+        if (animatorFilter) {
+            filteredData = filteredData.filter(item => item.Animator === animatorFilter);
+        }
+
+        // Apply episode filter
+        if (episodeFilter) {
+            filteredData = filteredData.filter(item => item['Episode/Title'] === episodeFilter);
+        }
+
+        // Apply notes filter (case-insensitive partial match)
+        if (notesFilter) {
+            filteredData = filteredData.filter(item => 
+                item.Notes && item.Notes.toLowerCase().includes(notesFilter)
+            );
+        }
+
+        // Clear and render filtered table
+        const filterDescription = this.buildFilterDescription(animatorFilter, episodeFilter, notesFilter);
+        this.renderFilteredData(filteredData, filterDescription);
+    }
+
+    buildFilterDescription(animatorFilter, episodeFilter, notesFilter) {
+        const filters = [];
+        if (animatorFilter) filters.push(`animator: ${animatorFilter}`);
+        if (episodeFilter) filters.push(`episode: ${episodeFilter}`);
+        if (notesFilter) filters.push(`notes: "${notesFilter}"`);
+        return filters.length > 0 ? filters.join(', ') : 'multiple filters';
+    }
+
+    clearAllFilters() {
+        // Clear all filter dropdowns
+        document.getElementById('animatorFilter').value = '';
+        document.getElementById('episodeFilter').value = '';
+        document.getElementById('notesFilter').value = '';
+        document.getElementById('weekFilter').value = '';
+        
+        // Show all data
+        this.renderTable();
+        
+        console.log('🧹 All filters cleared - showing all data');
+    }
+
+    renderFilteredData(filteredData, filterDescription) {
+        const tbody = document.querySelector('#productionTable tbody');
+        tbody.innerHTML = '';
+
+        if (filteredData.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="9" style="text-align: center;">No entries found for selected filters</td>';
+            tbody.appendChild(row);
+        } else {
+            filteredData.forEach((item, originalIndex) => {
+                // Find the original index in productionData for edit/delete operations
+                const realIndex = this.productionData.findIndex(dataItem => 
+                    dataItem.Animator === item.Animator &&
+                    dataItem['Project Type'] === item['Project Type'] &&
+                    dataItem['Episode/Title'] === item['Episode/Title'] &&
+                    dataItem.Scene === item.Scene &&
+                    dataItem.Shot === item.Shot &&
+                    dataItem['Week (YYYYMMDD)'] === item['Week (YYYYMMDD)']
+                );
+
+                const row = document.createElement('tr');
+                const statusClass = item.Status ? `status-${item.Status.toLowerCase().replace(' ', '-')}` : '';
+                
+                row.innerHTML = `
+                    <td>${item.Animator || ''}</td>
+                    <td>${item['Project Type'] || ''}</td>
+                    <td>${item['Episode/Title'] || ''}</td>
+                    <td>${item.Scene || ''}</td>
+                    <td>${item.Shot || ''}</td>
+                    <td>${item['Week (YYYYMMDD)'] || ''}</td>
+                    <td class="${statusClass}">${item.Status || ''}</td>
+                    <td>${item.Notes || ''}</td>
+                    <td>
+                        <button class="btn-edit" onclick="tracker.showEditModal(${realIndex})">Edit</button>
+                        <button class="btn-delete" onclick="tracker.confirmDelete(${realIndex})">×</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        console.log(`🔍 Filtered by ${filterDescription}: ${filteredData.length} entries found`);
+    }
+
+    populateEpisodeFilterDropdown() {
+        const episodeFilter = document.getElementById('episodeFilter');
+        
+        // Get unique episodes from current production data
+        const uniqueEpisodes = [...new Set(this.productionData.map(item => item['Episode/Title']).filter(Boolean))];
+        uniqueEpisodes.sort();
+
+        // Clear existing options except "All Episodes/Titles"
+        episodeFilter.innerHTML = '<option value="">All Episodes/Titles</option>';
+
+        uniqueEpisodes.forEach(episode => {
+            const option = document.createElement('option');
+            option.value = episode;
+            option.textContent = episode;
+            episodeFilter.appendChild(option);
+        });
+
+        console.log(`📺 Populated episode filter with ${uniqueEpisodes.length} unique episodes`);
     }
 
     showEditModal(index) {
@@ -551,12 +801,17 @@ class ProductionTracker {
             <div class="form-group">
                 <label for="editAnimator">Animator:</label>
                 <select id="editAnimator" required>
-                    <option value="Abhishek A." ${item.Animator === 'Abhishek A.' ? 'selected' : ''}>Abhishek A.</option>
-                    <option value="Kiran Kilaga" ${item.Animator === 'Kiran Kilaga' ? 'selected' : ''}>Kiran Kilaga</option>
-                    <option value="Saumitra Sachan" ${item.Animator === 'Saumitra Sachan' ? 'selected' : ''}>Saumitra Sachan</option>
-                    <option value="Pranab Rout" ${item.Animator === 'Pranab Rout' ? 'selected' : ''}>Pranab Rout</option>
-                    <option value="Nazir Hossain" ${item.Animator === 'Nazir Hossain' ? 'selected' : ''}>Nazir Hossain</option>
-                    <option value="Nikhil Prakash" ${item.Animator === 'Nikhil Prakash' ? 'selected' : ''}>Nikhil Prakash</option>
+                    <optgroup label="Staff Animators">
+                        <option value="Abhishek A." ${item.Animator === 'Abhishek A.' ? 'selected' : ''}>Abhishek A.</option>
+                        <option value="Kiran Kilaga" ${item.Animator === 'Kiran Kilaga' ? 'selected' : ''}>Kiran Kilaga</option>
+                        <option value="Saumitra Sachan" ${item.Animator === 'Saumitra Sachan' ? 'selected' : ''}>Saumitra Sachan</option>
+                        <option value="Pranab Rout" ${item.Animator === 'Pranab Rout' ? 'selected' : ''}>Pranab Rout</option>
+                        <option value="Nazir Hossain" ${item.Animator === 'Nazir Hossain' ? 'selected' : ''}>Nazir Hossain</option>
+                        <option value="Nikhil Prakash" ${item.Animator === 'Nikhil Prakash' ? 'selected' : ''}>Nikhil Prakash</option>
+                    </optgroup>
+                    <optgroup label="Freelance Animators">
+                        <option value="Malhar Parode" ${item.Animator === 'Malhar Parode' ? 'selected' : ''}>Malhar Parode</option>
+                    </optgroup>
                 </select>
             </div>
             <div class="form-group">
@@ -566,9 +821,9 @@ class ProductionTracker {
             <div class="form-group">
                 <label for="editStatus">Status:</label>
                 <select id="editStatus" required>
-                    <option value="submitted" ${item.Status === 'submitted' ? 'selected' : ''}>Submitted for Review</option>
-                    <option value="approved" ${item.Status === 'approved' ? 'selected' : ''}>Approved</option>
-                    <option value="revision" ${item.Status === 'revision' ? 'selected' : ''}>Needs Revision</option>
+                    <option value="submit-review-jae" ${item.Status === 'submit-review-jae' ? 'selected' : ''}>Submit review from Jae</option>
+                    <option value="approved-jae" ${item.Status === 'approved-jae' ? 'selected' : ''}>Approved by Jae</option>
+                    <option value="needs-revision" ${item.Status === 'needs-revision' ? 'selected' : ''}>Needs Revision</option>
                 </select>
             </div>
             <div class="form-group">
@@ -607,7 +862,15 @@ class ProductionTracker {
 
             if (response.ok) {
                 await this.loadProductionData();
-                this.renderTable();
+                
+                // Re-apply current filter if one is active
+                const currentFilter = document.getElementById('weekFilter').value;
+                if (currentFilter) {
+                    this.filterByWeek();
+                } else {
+                    this.renderTable();
+                }
+                
                 this.hideEditModal();
                 
                 // SCENARIO 2: Sync update to local server

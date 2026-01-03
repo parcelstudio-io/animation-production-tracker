@@ -21,12 +21,17 @@
                         <label for="animator">Animator:</label>
                         <select id="animator" required>
                             <option value="">Select Animator</option>
-                            <option value="Abhishek A.">Abhishek A.</option>
-                            <option value="Kiran Kilaga">Kiran Kilaga</option>
-                            <option value="Saumitra Sachan">Saumitra Sachan</option>
-                            <option value="Pranab Rout">Pranab Rout</option>
-                            <option value="Nazir Hossain">Nazir Hossain</option>
-                            <option value="Nikhil Prakash">Nikhil Prakash</option>
+                            <optgroup label="Staff Animators">
+                                <option value="Abhishek A.">Abhishek A.</option>
+                                <option value="Kiran Kilaga">Kiran Kilaga</option>
+                                <option value="Saumitra Sachan">Saumitra Sachan</option>
+                                <option value="Pranab Rout">Pranab Rout</option>
+                                <option value="Nazir Hossain">Nazir Hossain</option>
+                                <option value="Nikhil Prakash">Nikhil Prakash</option>
+                            </optgroup>
+                            <optgroup label="Freelance Animators">
+                                <option value="Malhar Parode">Malhar Parode</option>
+                            </optgroup>
                         </select>
                     </div>
 
@@ -71,15 +76,15 @@
                         <label for="status">Status:</label>
                         <select id="status" required>
                             <option value="">Select Status</option>
-                            <option value="submitted">Submitted for Review</option>
-                            <option value="approved">Approved</option>
-                            <option value="revision">Needs Revision</option>
+                            <option value="submit-review-jae">Submit review from Jae</option>
+                            <option value="approved-jae">Approved by Jae</option>
+                            <option value="needs-revision">Needs Revision</option>
                         </select>
                     </div>
 
                     <div class="form-group">
                         <label for="notes">Notes:</label>
-                        <textarea id="notes" rows="3" placeholder="Additional notes..."></textarea>
+                        <textarea id="notes" rows="3" placeholder="Please add the animation freelancer's name if the freelancer worked on the shot"></textarea>
                     </div>
 
                     <button type="submit" class="btn-submit">Submit Entry</button>
@@ -97,8 +102,47 @@
                                placeholder="Enter week (YYYYMMDD)" title="Format: YYYYMMDD">
                         <button id="nextWeek" class="btn-arrow" title="Next Week (Newer)">→</button>
                     </div>
-                    <button id="filterWeek" class="btn-filter">View Week</button>
                     <button id="showAll" class="btn-filter">Show All</button>
+                </div>
+
+                <div class="additional-filters">
+                    <h3>Filter Options</h3>
+                    <div class="filter-controls">
+                        <div class="filter-group">
+                            <label for="animatorFilter">Filter by Animator:</label>
+                            <select id="animatorFilter">
+                                <option value="">All Animators</option>
+                                <optgroup label="Staff Animators">
+                                    <option value="Abhishek A.">Abhishek A.</option>
+                                    <option value="Kiran Kilaga">Kiran Kilaga</option>
+                                    <option value="Saumitra Sachan">Saumitra Sachan</option>
+                                    <option value="Pranab Rout">Pranab Rout</option>
+                                    <option value="Nazir Hossain">Nazir Hossain</option>
+                                    <option value="Nikhil Prakash">Nikhil Prakash</option>
+                                </optgroup>
+                                <optgroup label="Freelance Animators">
+                                    <option value="Malhar Parode">Malhar Parode</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="episodeFilter">Filter by Episode/Title:</label>
+                            <select id="episodeFilter">
+                                <option value="">All Episodes/Titles</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label for="notesFilter">Filter by Notes:</label>
+                            <input type="text" id="notesFilter" placeholder="Search in notes (e.g. freelancer name)">
+                        </div>
+
+                        <div class="filter-group">
+                            <button id="applyFilters" class="btn-filter">Apply Filters</button>
+                            <button id="clearFilters" class="btn-filter">Clear All Filters</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="data-table-container">

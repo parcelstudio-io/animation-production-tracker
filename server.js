@@ -18,7 +18,7 @@ app.use(express.json());
 const ROOT_DIR = path.join(__dirname, '../../..');
 const PRODUCTION_SUMMARY_PATH = path.join(__dirname, 'production_summary.xlsx');
 
-// Initialize database connection
+// Initialize database connection and sync from local Excel
 async function initializeApp() {
     console.log('🚀 Initializing Animation Production Tracker...');
     
@@ -28,7 +28,137 @@ async function initializeApp() {
     // Initialize Excel file
     initializeExcelFile();
     
+    // 🎯 CRITICAL: Sync Railway database FROM local Excel file (Excel is authoritative)
+    const syncSuccess = await syncFromLocalExcelFile();
+    
+    if (!syncSuccess) {
+        // Schedule a delayed retry in case local server is starting up
+        console.log('⏰ Scheduling delayed startup sync in 30 seconds...');
+        setTimeout(async () => {
+            console.log('🔄 DELAYED STARTUP SYNC: Attempting Excel sync after delay...');
+            const delayedSyncSuccess = await syncFromLocalExcelFile();
+            if (delayedSyncSuccess) {
+                console.log('✅ DELAYED SYNC SUCCESS: Excel data loaded after delay');
+            } else {
+                console.log('⚠️ DELAYED SYNC FAILED: Excel data still not accessible');
+                console.log('💡 Manual sync available via page refresh or /api/production-data/with-local-sync');
+            }
+        }, 30000);
+    }
+    
     console.log('✅ Application initialized successfully');
+}
+
+// Sync Railway database FROM local Excel file (Excel = ground truth)
+async function syncFromLocalExcelFile() {
+    console.log('🎯 STARTUP SYNC: Syncing Railway database FROM local Excel file...');
+    console.log('📊 Excel file is the authoritative source of truth');
+    
+    try {
+        // Check if database connection is available
+        if (!db.isEnabled()) {
+            console.log('⚠️ Database not available - skipping startup sync');
+            return false;
+        }
+        
+        console.log('🔄 Attempting to fetch latest data from local Excel file...');
+        
+        // Try to fetch data from local server with retry logic
+        const localServerData = await fetchFromLocalServerWithRetry();
+        
+        if (localServerData && localServerData.length > 0) {
+            console.log(`📥 SUCCESS: Found ${localServerData.length} records in local Excel file`);
+            console.log('🗃️ Replacing Railway database with Excel data...');
+            
+            // Clear and replace Railway database with Excel data
+            await db.replaceAllRecords(localServerData);
+            
+            console.log('✅ STARTUP SYNC COMPLETE: Railway database synchronized with Excel file');
+            console.log(`📊 Database now contains ${localServerData.length} records from Excel`);
+            return true;
+            
+        } else {
+            console.log('⚠️ STARTUP SYNC FAILED: No local server data available');
+            console.log('📋 Possible reasons:');
+            console.log('   - Local server not running');
+            console.log('   - Excel file not found or empty');
+            console.log('   - Network connectivity issues');
+            console.log('   - Environment variables not configured');
+            console.log('🎯 Railway database will use existing data (may be empty or outdated)');
+            return false;
+        }
+        
+    } catch (error) {
+        console.error('❌ STARTUP SYNC ERROR:', error.message);
+        console.log('📊 Railway database will continue with existing data');
+        console.log('💡 To resolve: Ensure local server is running with Excel file');
+        return false;
+    }
+}
+
+// Enhanced fetch with retry logic for startup
+async function fetchFromLocalServerWithRetry(maxRetries = 3, retryDelay = 2000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`🔄 Fetch attempt ${attempt}/${maxRetries}...`);
+        
+        try {
+            const data = await fetchFromLocalServer();
+            if (data && data.length > 0) {
+                console.log(`✅ Fetch successful on attempt ${attempt}`);
+                return data;
+            }
+            
+            if (attempt < maxRetries) {
+                console.log(`⏳ Attempt ${attempt} returned no data, retrying in ${retryDelay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+            
+        } catch (error) {
+            console.log(`❌ Attempt ${attempt} failed: ${error.message}`);
+            
+            if (attempt < maxRetries) {
+                console.log(`⏳ Retrying in ${retryDelay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            } else {
+                console.log(`❌ All ${maxRetries} attempts failed`);
+                throw error;
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Fetch production data from local server
+async function fetchFromLocalServer() {
+    if (!process.env.LOCAL_SERVER_URL || !process.env.LOCAL_SERVER_API_KEY) {
+        console.log('⚠️ Local server not configured (missing LOCAL_SERVER_URL or LOCAL_SERVER_API_KEY)');
+        return null;
+    }
+    
+    try {
+        console.log(`📡 Fetching data from local server: ${process.env.LOCAL_SERVER_URL}`);
+        
+        const response = await axios.get(`${process.env.LOCAL_SERVER_URL}/api/productions`, {
+            headers: {
+                'x-api-key': process.env.LOCAL_SERVER_API_KEY,
+                'ngrok-skip-browser-warning': 'true'
+            },
+            timeout: 10000
+        });
+        
+        if (response.data && Array.isArray(response.data)) {
+            console.log(`✅ Successfully fetched ${response.data.length} records from local server`);
+            return response.data;
+        } else {
+            console.log('⚠️ Invalid response format from local server');
+            return null;
+        }
+        
+    } catch (error) {
+        console.error('❌ Failed to fetch from local server:', error.message);
+        return null;
+    }
 }
 
 // [Keep all existing directory scanning functions unchanged]
@@ -135,20 +265,20 @@ function scanForScenesAndShots(projectPath, project, projectType) {
       console.log(`Shots path does not exist: ${shotsPath}`);
     }
   } else if (projectType === 'short') {
-    // Short-form: <root_dir>/contents/short_forms/<short_title>/02_layout/<scene_num>_<shot_num>/
+    // Short-form: <root_dir>/contents/short_forms/<short_title>/03_animation/<scene_shot>/
     // scenes have prefix `sc` and shots have prefix `sh`
-    const layoutPath = path.join(projectPath, '02_layout');
+    const animationPath = path.join(projectPath, '03_animation');
     
-    if (fs.existsSync(layoutPath)) {
+    if (fs.existsSync(animationPath)) {
       try {
-        const sceneShots = fs.readdirSync(layoutPath);
+        const sceneShots = fs.readdirSync(animationPath);
         
         sceneShots.forEach(sceneShot => {
-          const sceneShotPath = path.join(layoutPath, sceneShot);
+          const sceneShotPath = path.join(animationPath, sceneShot);
           
           try {
             if (fs.statSync(sceneShotPath).isDirectory()) {
-              // Parse individual scene_shot format like "sc_01_sh_01"
+              // Parse combined scene_shot format like "sc_01_sh_01"
               const match = sceneShot.match(/^(sc_\d+)_(sh_\d+)$/i);
               if (match) {
                 const scene = match[1];
@@ -156,7 +286,7 @@ function scanForScenesAndShots(projectPath, project, projectType) {
                 
                 console.log(`  Found scene-shot: ${sceneShot} -> scene: ${scene}, shot: ${shot}`);
                 project.scenes.add(scene);
-                project.shots.push({ scene, shot });
+                project.shots.push({ scene, shot, path: sceneShotPath });
               }
             }
           } catch (itemStatError) {
@@ -164,10 +294,10 @@ function scanForScenesAndShots(projectPath, project, projectType) {
           }
         });
       } catch (pathReadError) {
-        console.warn(`Could not read layout path ${layoutPath}:`, pathReadError.message);
+        console.warn(`Could not read animation path ${animationPath}:`, pathReadError.message);
       }
     } else {
-      console.log(`Layout path does not exist: ${layoutPath}`);
+      console.log(`Animation path does not exist: ${animationPath}`);
     }
   }
 }
@@ -237,14 +367,25 @@ function scanDirectoryStructure() {
     console.log(`  ${ep.name} - ${ep.scenes.length} scenes, ${ep.shots.length} shots`);
   });
   
-  console.log(`Found ${shortForms.length} short-form episodes:`);
-  shortForms.forEach(sf => {
+  // Sort short forms by numeric prefix in descending order and limit to top 20
+  const maxShortForms = parseInt(process.env.MAX_SHORT_FORMS) || 20;
+  shortForms.sort((a, b) => {
+    // Extract numeric prefix for sorting
+    const aNum = parseInt(a.name.match(/^(\d+)_/)?.[1] || '0');
+    const bNum = parseInt(b.name.match(/^(\d+)_/)?.[1] || '0');
+    return bNum - aNum; // Descending order
+  });
+  
+  const limitedShortForms = shortForms.slice(0, maxShortForms);
+  
+  console.log(`Found ${shortForms.length} short-form episodes (showing top ${maxShortForms}):`);
+  limitedShortForms.forEach(sf => {
     console.log(`  ${sf.name} - ${sf.scenes.length} scenes, ${sf.shots.length} shots`);
   });
   
   return { 
     episodes: episodes.sort((a, b) => b.name.localeCompare(a.name)), 
-    shortForms: shortForms.sort((a, b) => b.name.localeCompare(a.name)) 
+    shortForms: limitedShortForms
   };
 }
 
@@ -547,31 +688,37 @@ app.post('/api/production-data', async (req, res) => {
     // Always save to Excel first (local persistence)
     const existingData = readExcelData();
     
-    // Check for duplicate entry
+    // Check for duplicate entry based on project content only (no animator/week duplicates allowed)
     const duplicateIndex = existingData.findIndex(item => 
-      item.Animator === newEntry.Animator &&
       item['Project Type'] === newEntry['Project Type'] &&
       item['Episode/Title'] === newEntry['Episode/Title'] &&
       item.Scene === newEntry.Scene &&
-      item.Shot === newEntry.Shot &&
-      item['Week (YYYYMMDD)'] === newEntry['Week (YYYYMMDD)']
+      item.Shot === newEntry.Shot
     );
     
-    let isUpdate = false;
     if (duplicateIndex !== -1) {
-      // Duplicate found - update if different
-      if (existingData[duplicateIndex].Status !== newEntry.Status) {
-        existingData[duplicateIndex].Status = newEntry.Status;
-        existingData[duplicateIndex].Notes = newEntry.Notes;
-        isUpdate = true;
-      } else {
-        return res.json({ success: true, updated: false, message: 'Entry already exists with same status' });
-      }
-    } else {
-      // No duplicate, add new entry
-      existingData.push(newEntry);
-      isUpdate = false;
+      // Duplicate scene/shot combination found - reject the submission
+      const existing = existingData[duplicateIndex];
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Duplicate scene/shot combination detected',
+        message: `This scene/shot combination already exists`,
+        existingEntry: {
+          animator: existing.Animator,
+          week: existing['Week (YYYYMMDD)'],
+          status: existing.Status,
+          projectType: existing['Project Type'],
+          episodeTitle: existing['Episode/Title'],
+          scene: existing.Scene,
+          shot: existing.Shot
+        },
+        conflictDetails: `${newEntry['Project Type']} > ${newEntry['Episode/Title']} > ${newEntry.Scene} > ${newEntry.Shot}`
+      });
     }
+    
+    // No duplicate found, add new entry
+    existingData.push(newEntry);
+    let isUpdate = false;
     
     // Save to Excel
     const excelSuccess = writeExcelData(existingData);
@@ -601,7 +748,7 @@ app.post('/api/production-data', async (req, res) => {
     
     // Notify local server if configured
     try {
-      await notifyLocalServer(isUpdate ? 'data_updated' : 'data_created', newEntry);
+      // NOTE: Removed notifyLocalServer - Excel file is now authoritative source
     } catch (localError) {
       console.warn('⚠️  Local server notification failed:', localError.message);
     }
@@ -642,7 +789,7 @@ app.put('/api/production-data/:index', async (req, res) => {
       
       // Notify local server if configured
       try {
-        await notifyLocalServer('data_updated', updatedEntry);
+        // NOTE: Removed notifyLocalServer - Excel file is now authoritative source
       } catch (localError) {
         console.warn('⚠️  Local server notification failed:', localError.message);
       }
@@ -899,13 +1046,19 @@ async function notifyLocalServer(action, data) {
   const localServerUrl = process.env.LOCAL_SERVER_URL;
   const apiKey = process.env.LOCAL_SERVER_API_KEY;
   
+  console.log(`🔍 DEBUG - notifyLocalServer called with action: ${action}`);
+  console.log(`🔍 DEBUG - Local server URL: ${localServerUrl}`);
+  console.log(`🔍 DEBUG - API Key configured: ${!!apiKey}`);
+  console.log(`🔍 DEBUG - Data to send:`, JSON.stringify(data, null, 2));
+  
   if (!localServerUrl) {
-    console.log('ℹ️  Local server URL not configured - skipping notification');
+    console.log('⚠️  Local server URL not configured - skipping notification');
+    console.log('💡 Set LOCAL_SERVER_URL environment variable to enable local sync');
     return;
   }
 
   try {
-    console.log(`📤 Notifying local server: ${action}`);
+    console.log(`📤 Notifying local server: ${action} -> ${localServerUrl}/api/sync/from-railway`);
     
     const headers = {
       'Content-Type': 'application/json'
@@ -913,19 +1066,42 @@ async function notifyLocalServer(action, data) {
     
     if (apiKey) {
       headers['x-api-key'] = apiKey;
+      console.log(`🔑 Using API key for authentication`);
+    } else {
+      console.log(`⚠️  No API key configured - request may be rejected`);
     }
 
-    await axios.post(`${localServerUrl}/api/sync/from-railway`, {
+    const payload = {
       action,
       data
-    }, {
+    };
+    
+    console.log(`📦 Sending payload:`, JSON.stringify(payload, null, 2));
+
+    const response = await axios.post(`${localServerUrl}/api/sync/from-railway`, payload, {
       headers,
       timeout: 10000
     });
     
+    console.log(`✅ Local server responded with status: ${response.status}`);
+    console.log(`📥 Response data:`, JSON.stringify(response.data, null, 2));
     console.log('✅ Local server notified successfully');
   } catch (error) {
     console.error('❌ Failed to notify local server:', error.message);
+    console.error('🔍 Error details:', {
+      url: localServerUrl,
+      hasApiKey: !!apiKey,
+      errorCode: error.code,
+      errorStatus: error.response?.status,
+      errorData: error.response?.data
+    });
+    
+    // Log the full error for debugging
+    if (error.response) {
+      console.error('📤 Response status:', error.response.status);
+      console.error('📤 Response headers:', error.response.headers);
+      console.error('📤 Response data:', error.response.data);
+    }
   }
 }
 
@@ -994,27 +1170,72 @@ const originalGetProductionData = app._router.stack.find(layer =>
   layer.route && layer.route.path === '/api/production-data' && layer.route.methods.get
 );
 
-// Query local server when users visit the app
+// Query local server when users visit the app (Excel is authoritative)
 app.get('/api/production-data/with-local-sync', async (req, res) => {
   try {
-    // First get regular production data
-    const regularData = await db.getAllProductions();
+    console.log('🔄 User refreshed page - syncing from local Excel file...');
     
-    // Then query local server for updates and structure
-    const localData = await queryLocalServerForUpdates();
+    // 🎯 SYNC FROM LOCAL EXCEL FILE (authoritative source)
+    let syncResult = null;
+    let localServerConnected = false;
+    
+    try {
+      // Fetch latest data from local Excel file
+      const localServerData = await fetchFromLocalServer();
+      
+      if (localServerData && localServerData.length > 0) {
+        localServerConnected = true;
+        console.log(`📥 Found ${localServerData.length} records in local Excel file`);
+        
+        // Replace Railway database with Excel data (Excel is authoritative)
+        await db.replaceAllRecords(localServerData);
+        syncResult = {
+          success: true,
+          recordsCount: localServerData.length,
+          message: 'Railway database synchronized with local Excel file'
+        };
+        console.log('✅ Railway database updated from Excel file');
+      } else {
+        console.log('⚠️ No local server data available');
+        syncResult = {
+          success: false,
+          message: 'Local server not available or no data found'
+        };
+      }
+    } catch (syncError) {
+      console.error('❌ Failed to sync from local Excel:', syncError);
+      syncResult = {
+        success: false,
+        error: syncError.message,
+        message: 'Failed to sync from local Excel file'
+      };
+    }
+    
+    // Get current Railway data (should now match Excel)
+    const productionData = await db.getAllProductions();
+    
+    // Query local server for directory structure
     const localStructure = await queryLocalServerForStructure();
     
     res.json({
       success: true,
-      data: regularData,
-      localServerData: localData,
+      data: productionData,
+      localServerConnected: localServerConnected,
       localServerStructure: localStructure,
-      localServerConnected: !!(localData || localStructure),
+      syncFromExcel: syncResult,
+      excelIsAuthoritative: true,
+      message: localServerConnected ? 
+        'Data synchronized from local Excel file' : 
+        'Using Railway data (local server not available)',
       timestamp: new Date().toISOString()
     });
+    
   } catch (error) {
     console.error('❌ Failed to get production data with local sync:', error);
-    res.status(500).json({ error: 'Failed to retrieve data' });
+    res.status(500).json({ 
+      error: 'Failed to retrieve data',
+      details: error.message 
+    });
   }
 });
 
@@ -1034,8 +1255,35 @@ process.on('SIGTERM', async () => {
 // Start server
 initializeApp().then(() => {
   app.listen(PORT, () => {
-    console.log(`🚀 Animation Production Tracker running on http://localhost:${PORT}`);
-    console.log(`📊 Database: ${db.isEnabled() ? 'Connected' : 'Disabled (Excel-only mode)'}`);
+    console.log('\n' + '='.repeat(70));
+    console.log('🎬 ANIMATION PRODUCTION TRACKER - STARTUP COMPLETE');
+    console.log('='.repeat(70));
+    console.log(`🌐 Server URL: http://localhost:${PORT}`);
+    console.log(`📊 Database: ${db.isEnabled() ? 'Connected (PostgreSQL)' : 'Disabled (Excel-only mode)'}`);
     console.log(`☁️  Cloud sync: ${process.env.CLOUD_WEBAPP_URL ? 'Enabled' : 'Disabled'}`);
+    
+    // Excel sync status
+    console.log(`\n📋 EXCEL SYNC CONFIGURATION:`);
+    console.log(`🎯 Excel Authority: ${process.env.LOCAL_SERVER_URL ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔗 Local Server: ${process.env.LOCAL_SERVER_URL || 'Not configured'}`);
+    console.log(`🔑 API Key: ${process.env.LOCAL_SERVER_API_KEY ? 'Configured' : 'Not configured'}`);
+    
+    if (process.env.LOCAL_SERVER_URL && process.env.LOCAL_SERVER_API_KEY) {
+      console.log(`\n✅ STARTUP SYNC: Railway database synced from Excel file`);
+      console.log(`📄 Source: production_summary.xlsx (authoritative)`);
+      console.log(`📡 Method: Automatic sync on server startup + page refresh`);
+    } else {
+      console.log(`\n⚠️  EXCEL SYNC DISABLED: Missing configuration`);
+      console.log(`💡 To enable: Set LOCAL_SERVER_URL and LOCAL_SERVER_API_KEY`);
+      console.log(`📊 Using Railway database only (may be empty)`);
+    }
+    
+    console.log('\n' + '='.repeat(70));
+    console.log('🎯 Excel file is the authoritative source of production data');
+    console.log('🔄 Database syncs FROM Excel on startup and page refresh');
+    console.log('='.repeat(70) + '\n');
   });
+}).catch(error => {
+  console.error('❌ STARTUP FAILED:', error);
+  process.exit(1);
 });

@@ -187,22 +187,45 @@ main {
 
 .data-table-container {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 600px;
     border: 1px solid #000000;
+    position: relative;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
     background-color: #ffffff;
-    min-width: 800px;
+    min-width: 1200px;
+    table-layout: fixed;
 }
 
 table th, table td {
-    padding: 12px;
+    padding: 12px 8px;
     text-align: left;
     border-bottom: 1px solid #ddd;
+    border-right: 1px solid #e0e0e0;
     font-size: 13px;
+    vertical-align: top;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
+
+table th:last-child, table td:last-child {
+    border-right: none;
+}
+
+/* Column width specifications for proper alignment */
+table th:nth-child(1), table td:nth-child(1) { width: 120px; } /* Animator */
+table th:nth-child(2), table td:nth-child(2) { width: 100px; } /* Project Type */
+table th:nth-child(3), table td:nth-child(3) { width: 150px; } /* Episode/Title */
+table th:nth-child(4), table td:nth-child(4) { width: 80px; }  /* Scene */
+table th:nth-child(5), table td:nth-child(5) { width: 80px; }  /* Shot */
+table th:nth-child(6), table td:nth-child(6) { width: 100px; } /* Week */
+table th:nth-child(7), table td:nth-child(7) { width: 90px; }  /* Status */
+table th:nth-child(8), table td:nth-child(8) { width: 200px; } /* Notes */
+table th:nth-child(9), table td:nth-child(9) { width: 120px; } /* Actions */
 
 table th {
     background-color: #000000;
@@ -210,6 +233,9 @@ table th {
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 table tbody tr:hover {
@@ -319,4 +345,29 @@ table tbody tr:hover {
         width: 95%;
         padding: 20px;
     }
+    
+    /* Mobile table adjustments */
+    .data-table-container {
+        font-size: 11px;
+    }
+    
+    table {
+        min-width: 800px; /* Reduced for mobile but still maintaining structure */
+    }
+    
+    table th, table td {
+        padding: 8px 4px;
+        font-size: 11px;
+    }
+    
+    /* Adjusted column widths for mobile */
+    table th:nth-child(1), table td:nth-child(1) { width: 100px; } /* Animator */
+    table th:nth-child(2), table td:nth-child(2) { width: 80px; }  /* Project Type */
+    table th:nth-child(3), table td:nth-child(3) { width: 120px; } /* Episode/Title */
+    table th:nth-child(4), table td:nth-child(4) { width: 60px; }  /* Scene */
+    table th:nth-child(5), table td:nth-child(5) { width: 60px; }  /* Shot */
+    table th:nth-child(6), table td:nth-child(6) { width: 80px; }  /* Week */
+    table th:nth-child(7), table td:nth-child(7) { width: 70px; }  /* Status */
+    table th:nth-child(8), table td:nth-child(8) { width: 150px; } /* Notes */
+    table th:nth-child(9), table td:nth-child(9) { width: 100px; } /* Actions */
 }

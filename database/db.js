@@ -97,21 +97,48 @@ class DatabaseManager {
         }
     }
 
+    // Check for duplicate scene/shot combination
+    async checkDuplicate(projectType, episodeTitle, scene, shot) {
+        if (!this.isConnected) {
+            return null;
+        }
+
+        try {
+            const result = await this.query(`
+                SELECT id, animator, week_yyyymmdd, status, notes
+                FROM production_summary 
+                WHERE project_type = $1 AND episode_title = $2 AND scene = $3 AND shot = $4
+                LIMIT 1
+            `, [projectType, episodeTitle, scene, shot]);
+
+            return result.rows.length > 0 ? result.rows[0] : null;
+        } catch (error) {
+            console.error('❌ Error checking for duplicates:', error);
+            return null;
+        }
+    }
+
     async insertData(data) {
         if (!this.isConnected) {
             throw new Error('Database not connected');
+        }
+
+        // Check for duplicates first
+        const duplicate = await this.checkDuplicate(
+            data.project_type,
+            data.episode_title, 
+            data.scene,
+            data.shot
+        );
+
+        if (duplicate) {
+            throw new Error(`Duplicate scene/shot combination: ${data.project_type} > ${data.episode_title} > ${data.scene} > ${data.shot} (assigned to ${duplicate.animator} in week ${duplicate.week_yyyymmdd})`);
         }
 
         const result = await this.query(`
             INSERT INTO production_summary 
             (animator, project_type, episode_title, scene, shot, week_yyyymmdd, status, notes, synced_to_local)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (animator, project_type, episode_title, scene, shot, week_yyyymmdd) 
-            DO UPDATE SET 
-                status = EXCLUDED.status,
-                notes = EXCLUDED.notes,
-                updated_at = CURRENT_TIMESTAMP,
-                synced_to_local = EXCLUDED.synced_to_local
             RETURNING id, created_at, updated_at
         `, [
             data.animator,
@@ -217,6 +244,53 @@ class DatabaseManager {
             `, ids);
         } catch (error) {
             console.error('❌ Error marking records as synced:', error);
+        }
+    }
+
+    // Replace all records with data from local Excel file (Excel is authoritative)
+    async replaceAllRecords(localExcelData) {
+        if (!this.isConnected) {
+            throw new Error('Database not connected');
+        }
+
+        console.log(`🔄 Replacing Railway database with ${localExcelData.length} records from local Excel file...`);
+        
+        const client = await this.pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            // Clear all existing data
+            await client.query('DELETE FROM production_summary');
+            console.log('🗑️ Cleared existing Railway database records');
+            
+            // Insert all Excel data
+            for (const record of localExcelData) {
+                await client.query(`
+                    INSERT INTO production_summary 
+                    (animator, project_type, episode_title, scene, shot, week_yyyymmdd, status, notes, synced_to_local)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                `, [
+                    record.animator,
+                    record.project_type, 
+                    record.episode_title,
+                    record.scene,
+                    record.shot,
+                    record.week_yyyymmdd,
+                    record.status,
+                    record.notes || '',
+                    true // Mark as synced since it came from local
+                ]);
+            }
+            
+            await client.query('COMMIT');
+            console.log(`✅ Railway database replaced with ${localExcelData.length} records from Excel`);
+            
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('❌ Error replacing database records:', error);
+            throw error;
+        } finally {
+            client.release();
         }
     }
 

@@ -15,8 +15,9 @@ CREATE TABLE IF NOT EXISTS production_summary (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     synced_to_local BOOLEAN DEFAULT FALSE,
-    -- Unique constraint to prevent duplicates (same as Excel logic)
-    UNIQUE(animator, project_type, episode_title, scene, shot, week_yyyymmdd)
+    -- Old constraint: UNIQUE(animator, project_type, episode_title, scene, shot, week_yyyymmdd)
+    -- New constraint: Prevent duplicates based on project content only (no animator/week duplicates)
+    UNIQUE(project_type, episode_title, scene, shot)
 );
 
 -- Sync Log Table for tracking sync operations
