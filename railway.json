@@ -17,7 +17,8 @@
         "NODE_ENV": "production",
         "PORT": "3000",
         "ENABLE_CLOUD_SYNC": "true",
-        "ENABLE_LOCAL_EXCEL": "false"
+        "ENABLE_LOCAL_EXCEL": "false",
+        "DATABASE_URL": "${{ animation-tracker-db.DATABASE_URL }}"
       }
     }
   }

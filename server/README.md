@@ -4,7 +4,7 @@ A local server that syncs with the Railway-deployed production tracker web appli
 
 ## Features
 
-- **Excel-based Storage**: Uses production_summary.xlsx as authoritative local data source
+- **Excel-based Storage**: Uses production_summary.xlsx which uses the remote database hosted Railway as the canonical source.
 - **Real-time Bidirectional Sync**: Immediate synchronization on all data changes
 - **Animation Duration Analysis**: Automatic FFmpeg-based video duration checking
 - **REST API**: Full CRUD operations for production records with real-time sync
@@ -16,12 +16,14 @@ A local server that syncs with the Railway-deployed production tracker web appli
 ## Quick Start
 
 1. **Setup**
+
    ```bash
    chmod +x setup.sh
    ./setup.sh
    ```
 
 2. **Configure Environment**
+
    - Copy `.env.example` to `.env`
    - Set your Railway app URL and API secret
 
@@ -36,14 +38,14 @@ The server will be available at `http://localhost:3001`
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | 3001 |
-| `RAILWAY_APP_URL` | URL of your Railway app | - |
-| `API_SECRET` | API authentication key | - |
-| `DATABASE_PATH` | SQLite database file path | ./local_production.db |
-| `SYNC_INTERVAL_MINUTES` | Auto-sync interval | 5 |
-| `ENABLE_AUTO_SYNC` | Enable automatic sync | true |
+| Variable                | Description               | Default               |
+| ----------------------- | ------------------------- | --------------------- |
+| `PORT`                  | Server port               | 3001                  |
+| `RAILWAY_APP_URL`       | URL of your Railway app   | -                     |
+| `API_SECRET`            | API authentication key    | -                     |
+| `DATABASE_PATH`         | SQLite database file path | ./local_production.db |
+| `SYNC_INTERVAL_MINUTES` | Auto-sync interval        | 5                     |
+| `ENABLE_AUTO_SYNC`      | Enable automatic sync     | true                  |
 
 ## API Endpoints
 
@@ -103,11 +105,13 @@ The server supports real-time bidirectional synchronization:
 ### Animation Duration Checking
 
 **Long-form Content (Episodes):**
+
 - Path: `Episode_XX/03_Production/Shots/sc_XX/sh_XX/Playblasts/animation/`
 - Backup: `Episode_XX/For lineup/`
 - Analysis: FFmpeg video duration analysis
 
 **Short-form Content:**
+
 - Path: `contents/short_forms/XX_title/01_scan/SH_XX/`
 - Analysis: Image sequence frame counting (24fps)
 
@@ -130,7 +134,7 @@ Frontend operations receive detailed sync status:
   "data": { /* created/updated record */ },
   "sync_status": {
     "railway_push": "completed",     // or "failed"
-    "railway_pull": "completed",     // or "failed" 
+    "railway_pull": "completed",     // or "failed"
     "duration_ms": 1250,             // sync time in milliseconds
     "changes_pushed": 1,             // number of changes sent to Railway
     "changes_pulled": 0              // number of changes received from Railway
@@ -145,6 +149,7 @@ Frontend operations receive detailed sync status:
 **Public URL (via ngrok):** `https://nonconfirming-kaiden-nonoily.ngrok-free.dev`
 
 **Railway App Environment Variables:**
+
 ```bash
 LOCAL_SERVER_URL=https://nonconfirming-kaiden-nonoily.ngrok-free.dev
 LOCAL_SERVER_API_KEY=ParcelStudio2025
@@ -154,23 +159,33 @@ LOCAL_SERVER_API_KEY=ParcelStudio2025
 
 ```javascript
 // 1. Get Excel data in Railway format (NO AUTH REQUIRED)
-const response = await fetch('https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/sync/excel-data');
+const response = await fetch(
+  "https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/sync/excel-data"
+);
 const result = await response.json();
 // Returns: { success: true, data: [...], count: N, excel_file_available: true }
 
 // 2. Check Excel file status (WITH AUTH)
-const statusResponse = await fetch('https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/excel-status', {
-  headers: { 'x-api-key': 'ParcelStudio2025' }
-});
+const statusResponse = await fetch(
+  "https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/excel-status",
+  {
+    headers: { "x-api-key": "ParcelStudio2025" },
+  }
+);
 
 // 3. Download Excel file directly (WITH AUTH)
-const fileResponse = await fetch('https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/excel-export', {
-  headers: { 'x-api-key': 'ParcelStudio2025' }
-});
+const fileResponse = await fetch(
+  "https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/excel-export",
+  {
+    headers: { "x-api-key": "ParcelStudio2025" },
+  }
+);
 const blob = await fileResponse.blob(); // Excel file as blob
 
 // 4. Get production data in frontend format
-const frontendResponse = await fetch('https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/production-data');
+const frontendResponse = await fetch(
+  "https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/production-data"
+);
 const productionData = await frontendResponse.json();
 ```
 
@@ -183,22 +198,25 @@ The system now operates with immediate bidirectional sync:
 // No manual sync calls needed - happens automatically on every CRUD operation
 
 // Create new entry (automatic real-time sync)
-const createResponse = await fetch('https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/production-data', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    'Animator': 'John Doe',
-    'Project Type': 'long-form',
-    'Episode/Title': 'Episode_06',
-    'Scene': 'sc_01',
-    'Shot': 'sh_01',
-    'Week (YYYYMMDD)': '20250103',
-    'Status': 'submitted',
-    'Notes': 'Test entry'
-  })
-});
+const createResponse = await fetch(
+  "https://nonconfirming-kaiden-nonoily.ngrok-free.dev/api/production-data",
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      Animator: "John Doe",
+      "Project Type": "long-form",
+      "Episode/Title": "Episode_06",
+      Scene: "sc_01",
+      Shot: "sh_01",
+      "Week (YYYYMMDD)": "20250103",
+      Status: "submitted",
+      Notes: "Test entry",
+    }),
+  }
+);
 const result = await createResponse.json();
-console.log('Sync status:', result.sync_status);
+console.log("Sync status:", result.sync_status);
 ```
 
 ## Monitoring
