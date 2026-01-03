@@ -748,7 +748,18 @@ app.post('/api/production-data', async (req, res) => {
     
     // Notify local server if configured
     try {
-      // NOTE: Removed notifyLocalServer - Excel file is now authoritative source
+      console.log('🚀 CRITICAL: Notifying local server of Railway database change...');
+      await notifyLocalServer('create', {
+        animator: newEntry.Animator,
+        project_type: newEntry['Project Type'],
+        episode_title: newEntry['Episode/Title'],
+        scene: newEntry.Scene,
+        shot: newEntry.Shot,
+        week_yyyymmdd: newEntry['Week (YYYYMMDD)'],
+        status: newEntry.Status,
+        notes: newEntry.Notes || ''
+      });
+      console.log('✅ Local server notified of new Railway entry');
     } catch (localError) {
       console.warn('⚠️  Local server notification failed:', localError.message);
     }
@@ -789,7 +800,18 @@ app.put('/api/production-data/:index', async (req, res) => {
       
       // Notify local server if configured
       try {
-        // NOTE: Removed notifyLocalServer - Excel file is now authoritative source
+        console.log('🚀 CRITICAL: Notifying local server of Railway database update...');
+        await notifyLocalServer('update', {
+          animator: updatedEntry.Animator,
+          project_type: updatedEntry['Project Type'],
+          episode_title: updatedEntry['Episode/Title'],
+          scene: updatedEntry.Scene,
+          shot: updatedEntry.Shot,
+          week_yyyymmdd: updatedEntry['Week (YYYYMMDD)'],
+          status: updatedEntry.Status,
+          notes: updatedEntry.Notes || ''
+        });
+        console.log('✅ Local server notified of Railway entry update');
       } catch (localError) {
         console.warn('⚠️  Local server notification failed:', localError.message);
       }
@@ -821,6 +843,24 @@ app.delete('/api/production-data/:index', async (req, res) => {
       
       // TODO: Delete from database if we have a way to identify the record
       // This would require storing database IDs in Excel or using a different approach
+      
+      // Notify local server if configured
+      try {
+        console.log('🚀 CRITICAL: Notifying local server of Railway database deletion...');
+        await notifyLocalServer('delete', {
+          animator: deletedEntry.Animator,
+          project_type: deletedEntry['Project Type'],
+          episode_title: deletedEntry['Episode/Title'],
+          scene: deletedEntry.Scene,
+          shot: deletedEntry.Shot,
+          week_yyyymmdd: deletedEntry['Week (YYYYMMDD)'],
+          status: deletedEntry.Status,
+          notes: deletedEntry.Notes || ''
+        });
+        console.log('✅ Local server notified of Railway entry deletion');
+      } catch (localError) {
+        console.warn('⚠️  Local server notification failed:', localError.message);
+      }
       
       res.json({ success: true, message: 'Entry deleted successfully' });
     } else {
@@ -963,6 +1003,35 @@ async function sendWebhookToCloud(action, data) {
 }
 
 // Local server sync endpoints for Railway → Local communication
+// Database connection test endpoint
+app.get('/api/db-test', async (req, res) => {
+  try {
+    const result = await db.pool.query('SELECT NOW() as current_time, version() as db_version');
+    const tableExists = await db.pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'production_summary'
+      );
+    `);
+    
+    res.json({ 
+      success: true, 
+      message: 'Database connected successfully',
+      timestamp: result.rows[0].current_time,
+      database_version: result.rows[0].db_version,
+      production_table_exists: tableExists.rows[0].exists,
+      database_name: 'animation-tracker-db'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      message: 'Database connection failed'
+    });
+  }
+});
+
 // Export endpoint for local server to fetch all production data
 app.get('/api/productions/export', async (req, res) => {
   try {
