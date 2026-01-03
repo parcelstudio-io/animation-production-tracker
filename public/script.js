@@ -200,6 +200,49 @@ class ProductionTracker {
         alert(message);
     }
 
+    showSyncStatus(syncStatus, action = 'operation') {
+        // Create or update sync status indicator  
+        let syncDiv = document.getElementById('railway-sync-status');
+        if (!syncDiv) {
+            syncDiv = document.createElement('div');
+            syncDiv.id = 'railway-sync-status';
+            syncDiv.style.cssText = `
+                position: fixed;
+                top: 50px;
+                right: 10px;
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+                color: white;
+                z-index: 1000;
+                transition: opacity 0.3s;
+                max-width: 300px;
+            `;
+            document.body.appendChild(syncDiv);
+        }
+        
+        if (syncStatus.railway_push === 'completed' && syncStatus.railway_pull === 'completed') {
+            syncDiv.textContent = `🚄 Railway ${action} synced (${syncStatus.duration_ms}ms)`;
+            syncDiv.style.backgroundColor = '#007bff';
+        } else if (syncStatus.railway_push === 'failed' || syncStatus.railway_pull === 'failed') {
+            syncDiv.textContent = `⚠️ Railway sync failed - ${action} saved locally`;
+            syncDiv.style.backgroundColor = '#fd7e14';
+        } else {
+            syncDiv.textContent = `⏳ Syncing ${action} to Railway...`;
+            syncDiv.style.backgroundColor = '#6f42c1';
+        }
+        
+        // Auto-hide after 4 seconds
+        setTimeout(() => {
+            syncDiv.style.opacity = '0';
+            setTimeout(() => {
+                if (syncDiv.parentNode) {
+                    syncDiv.parentNode.removeChild(syncDiv);
+                }
+            }, 300);
+        }, 4000);
+    }
+
     async syncToLocalServer(data, action) {
         try {
             console.log(`📤 Syncing ${action} to local server...`);
@@ -551,6 +594,12 @@ class ProductionTracker {
             if (response.ok) {
                 const result = await response.json();
                 
+                // Display sync status information
+                if (result.sync_status) {
+                    console.log('🚀 Create sync completed:', result.sync_status);
+                    this.showSyncStatus(result.sync_status, 'create');
+                }
+                
                 // Update UI first
                 await this.loadProductionData();
                 
@@ -565,10 +614,10 @@ class ProductionTracker {
                 document.getElementById('submissionForm').reset();
                 this.clearSceneShot();
                 
-                // SCENARIO 2: Now sync to local server
-                await this.syncToLocalServer(formData, 'create');
-                
-                alert(result.message || 'Entry submitted successfully!');
+                // Show success message with sync status
+                const syncInfo = result.sync_status ? 
+                    ` (Synced to Railway in ${result.sync_status.duration_ms || 0}ms)` : '';
+                alert((result.message || 'Entry submitted successfully!') + syncInfo);
             } else {
                 const error = await response.json();
                 
@@ -861,6 +910,14 @@ class ProductionTracker {
             });
 
             if (response.ok) {
+                const result = await response.json();
+                
+                // Display sync status information
+                if (result.sync_status) {
+                    console.log('🚀 Update sync completed:', result.sync_status);
+                    this.showSyncStatus(result.sync_status, 'update');
+                }
+                
                 await this.loadProductionData();
                 
                 // Re-apply current filter if one is active
@@ -873,10 +930,10 @@ class ProductionTracker {
                 
                 this.hideEditModal();
                 
-                // SCENARIO 2: Sync update to local server
-                await this.syncToLocalServer(updatedItem, 'update');
-                
-                alert('Entry updated successfully!');
+                // Show success message with sync status
+                const syncInfo = result.sync_status ? 
+                    ` (Synced to Railway in ${result.sync_status.duration_ms || 0}ms)` : '';
+                alert((result.message || 'Entry updated successfully!') + syncInfo);
             } else {
                 alert('Error updating entry');
             }
@@ -960,6 +1017,14 @@ class ProductionTracker {
             });
 
             if (response.ok) {
+                const result = await response.json();
+                
+                // Display sync status information
+                if (result.sync_status) {
+                    console.log('🚀 Delete sync completed:', result.sync_status);
+                    this.showSyncStatus(result.sync_status, 'delete');
+                }
+                
                 await this.loadProductionData();
                 
                 // Re-apply current filter if one is active
@@ -970,10 +1035,10 @@ class ProductionTracker {
                     this.renderTable();
                 }
                 
-                // SCENARIO 2: Sync deletion to local server
-                await this.syncToLocalServer({ index }, 'delete');
-                
-                alert('Entry deleted successfully!');
+                // Show success message with sync status
+                const syncInfo = result.sync_status ? 
+                    ` (Synced to Railway in ${result.sync_status.duration_ms || 0}ms)` : '';
+                alert((result.message || 'Entry deleted successfully!') + syncInfo);
             } else {
                 alert('Error deleting entry');
             }

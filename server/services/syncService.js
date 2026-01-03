@@ -459,6 +459,55 @@ class SyncService {
         nextSync.setMinutes(nextSync.getMinutes() + this.syncInterval);
         return nextSync.toISOString();
     }
+
+    async performRealtimeBidirectionalSync(action = 'unknown') {
+        if (this.isSyncing) {
+            console.log('⏳ Sync already in progress, queuing real-time sync...');
+            // Wait a bit and try again
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (this.isSyncing) {
+                throw new Error('Sync service is busy, please try again');
+            }
+        }
+
+        this.isSyncing = true;
+        const syncStartTime = Date.now();
+        
+        console.log(`🚀 Starting real-time bidirectional sync for ${action}...`);
+        
+        try {
+            // 1. Push local changes to Railway (local is source of truth for this change)
+            console.log('📤 Step 1: Pushing local changes to Railway...');
+            const pushResult = await this.syncToRailway();
+            console.log(`✅ Push completed: ${pushResult.created} created, ${pushResult.updated} updated`);
+            
+            // 2. Pull latest data from Railway to catch any concurrent changes
+            console.log('📥 Step 2: Pulling latest data from Railway...');
+            const pullResult = await this.syncFromRailway();
+            console.log(`✅ Pull completed: ${pullResult.created} created, ${pullResult.updated} updated, ${pullResult.removed} removed`);
+            
+            const syncDuration = Date.now() - syncStartTime;
+            
+            console.log(`⚡ Real-time bidirectional sync completed in ${syncDuration}ms`);
+            
+            return {
+                success: true,
+                duration_ms: syncDuration,
+                push_result: pushResult,
+                pull_result: pullResult,
+                total_changes: {
+                    pushed: pushResult.created + pushResult.updated,
+                    pulled: pullResult.created + pullResult.updated + pullResult.removed
+                }
+            };
+
+        } catch (error) {
+            console.error(`❌ Real-time bidirectional sync failed for ${action}:`, error);
+            throw error;
+        } finally {
+            this.isSyncing = false;
+        }
+    }
 }
 
 module.exports = new SyncService();
